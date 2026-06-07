@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Spice Garden — Orders Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Theme variables ── */
+    [data-theme="light"] {
+      --bg:          #f5f5f5;
+      --card-bg:     #ffffff;
+      --header-bg:   #1a1a2e;
+      --text:        #333333;
+      --text-muted:  #888888;
+      --text-sub:    #555555;
+      --border:      #f0f0f0;
+      --border-dash: #f0f0f0;
+      --addr-bg:     #fafafa;
+      --filter-bg:   #ffffff;
+      --filter-border: #dddddd;
+      --shadow:      rgba(0,0,0,0.07);
+      --shadow-card: rgba(0,0,0,0.08);
+      --total-border:#f0f0f0;
+      --toggle-bg:   #e2e8f0;
+      --toggle-icon: "🌙";
+    }
+    [data-theme="dark"] {
+      --bg:          #0f0f1a;
+      --card-bg:     #1e1e2e;
+      --header-bg:   #0a0a14;
+      --text:        #e2e8f0;
+      --text-muted:  #64748b;
+      --text-sub:    #94a3b8;
+      --border:      #2d2d42;
+      --border-dash: #2d2d42;
+      --addr-bg:     #16162a;
+      --filter-bg:   #1e1e2e;
+      --filter-border:#2d2d42;
+      --shadow:      rgba(0,0,0,0.3);
+      --shadow-card: rgba(0,0,0,0.4);
+      --total-border:#2d2d42;
+      --toggle-bg:   #2d2d42;
+      --toggle-icon: "☀️";
+    }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      transition: background 0.3s, color 0.3s;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--header-bg);
+      color: white;
+      padding: 18px 30px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    header h1 { font-size: 1.4rem; letter-spacing: 1px; }
+    .header-right { display: flex; align-items: center; gap: 16px; }
+    .header-right span { font-size: 0.85rem; opacity: 0.7; }
+
+    /* ── Dark mode toggle ── */
+    .theme-toggle {
+      background: var(--toggle-bg);
+      border: none;
+      border-radius: 50px;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.3s, color 0.3s;
+      white-space: nowrap;
+    }
+    .theme-toggle:hover { opacity: 0.85; }
+
+    #live-dot {
+      display: inline-block;
+      width: 10px; height: 10px;
+      background: #4caf50;
+      border-radius: 50%;
+      margin-right: 6px;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+
+    /* ── Stats bar ── */
+    .stats {
+      display: flex;
+      gap: 16px;
+      padding: 20px 30px;
+      flex-wrap: wrap;
+    }
+    .stat-card {
+      background: var(--card-bg);
+      border-radius: 10px;
+      padding: 16px 24px;
+      flex: 1;
+      min-width: 140px;
+      text-align: center;
+      box-shadow: 0 2px 8px var(--shadow);
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+    .stat-card .num { font-size: 2rem; font-weight: 700; }
+    .stat-card .lbl { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; }
+    .stat-card.total .num    { color: #6366f1; }
+    .stat-card.pending .num  { color: #f39c12; }
+    .stat-card.preparing .num{ color: #2980b9; }
+    .stat-card.delivered .num{ color: #27ae60; }
+    .stat-card.revenue .num  { color: #8e44ad; }
+
+    /* ── Filters ── */
+    .filters {
+      padding: 0 30px 16px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .filter-btn {
+      padding: 7px 18px;
+      border: 2px solid var(--filter-border);
+      border-radius: 20px;
+      background: var(--filter-bg);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+    }
+    .filter-btn:hover, .filter-btn.active {
+      border-color: #6366f1;
+      background: #6366f1;
+      color: white;
+    }
+
+    /* ── Orders grid ── */
+    .orders-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 16px;
+      padding: 0 30px 30px;
+    }
+
+    /* ── Order card ── */
+    .order-card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      box-shadow: 0 2px 10px var(--shadow-card);
+      overflow: hidden;
+      transition: transform 0.2s, background 0.3s, box-shadow 0.3s;
+    }
+    .order-card:hover { transform: translateY(-2px); }
+
+    .card-header {
+      padding: 14px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+    }
+    .order-id   { font-weight: 700; font-size: 0.95rem; color: var(--text); }
+    .order-time { font-size: 0.75rem; color: var(--text-muted); }
+
+    .status-badge {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .status-pending   { background: #fff3cd; color: #856404; }
+    .status-preparing { background: #cfe2ff; color: #084298; }
+    .status-delivered { background: #d1e7dd; color: #0a3622; }
+
+    [data-theme="dark"] .status-pending   { background: #3d2e00; color: #fbbf24; }
+    [data-theme="dark"] .status-preparing { background: #0c2340; color: #60a5fa; }
+    [data-theme="dark"] .status-delivered { background: #052e16; color: #4ade80; }
+
+    .card-body { padding: 14px 18px; }
+
+    .phone-row {
+      font-size: 0.82rem;
+      color: var(--text-sub);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .items-list { margin-bottom: 12px; }
+    .item-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      padding: 3px 0;
+      border-bottom: 1px dashed var(--border-dash);
+      color: var(--text);
+    }
+    .item-row:last-child { border-bottom: none; }
+
+    .total-row {
+      display: flex;
+      justify-content: space-between;
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 2px solid var(--total-border);
+      color: var(--text);
+    }
+
+    .address-row {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-top: 10px;
+      padding: 8px;
+      background: var(--addr-bg);
+      border-radius: 6px;
+      transition: background 0.3s;
+    }
+
+    /* ── Status buttons ── */
+    .status-actions {
+      display: flex;
+      gap: 8px;
+      padding: 12px 18px;
+      border-top: 1px solid var(--border);
+    }
+    .btn-status {
+      flex: 1;
+      padding: 8px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .btn-status:hover { opacity: 0.85; }
+    .btn-preparing { background: #2980b9; color: white; }
+    .btn-delivered { background: #27ae60; color: white; }
+    .btn-status:disabled { opacity: 0.35; cursor: default; }
+
+    /* ── Empty state ── */
+    .empty {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+      grid-column: 1 / -1;
+    }
+    .empty h2 { font-size: 1.2rem; margin-bottom: 8px; }
+
+    /* ── New order flash ── */
+    @keyframes flashIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+    .new-order { animation: flashIn 0.4s ease; border: 2px solid #f39c12; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Spice Garden — Live Orders</h1>
+  <div class="header-right">
+    <span><span id="live-dot"></span>Auto-refreshing every 5 seconds</span>
+    <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn">🌙 Dark Mode</button>
+    <a href="/logout" style="background:#ef4444;color:white;border-radius:50px;padding:6px 14px;font-size:0.82rem;font-weight:600;text-decoration:none;">Logout</a>
+  </div>
+</header>
+
+<!-- Stats -->
+<div class="stats">
+  <div class="stat-card total">
+    <div class="num" id="stat-total">0</div>
+    <div class="lbl">Total Orders</div>
+  </div>
+  <div class="stat-card pending">
+    <div class="num" id="stat-pending">0</div>
+    <div class="lbl">Pending</div>
+  </div>
+  <div class="stat-card preparing">
+    <div class="num" id="stat-preparing">0</div>
+    <div class="lbl">Preparing</div>
+  </div>
+  <div class="stat-card delivered">
+    <div class="num" id="stat-delivered">0</div>
+    <div class="lbl">Delivered</div>
+  </div>
+  <div class="stat-card revenue">
+    <div class="num" id="stat-revenue">Rs. 0</div>
+    <div class="lbl">Total Revenue</div>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="filters">
+  <button class="filter-btn active" onclick="setFilter('all', this)">All Orders</button>
+  <button class="filter-btn" onclick="setFilter('pending', this)">Pending</button>
+  <button class="filter-btn" onclick="setFilter('preparing', this)">Preparing</button>
+  <button class="filter-btn" onclick="setFilter('delivered', this)">Delivered</button>
+</div>
+
+<!-- Orders -->
+<div class="orders-grid" id="orders-grid"></div>
+
+<script>
+  let currentFilter = 'all';
+  let knownIds = new Set();
+
+  // ── Theme toggle ──
+  const savedTheme = localStorage.getItem('theme') || 'light';
+  document.documentElement.setAttribute('data-theme', savedTheme);
+  updateToggleBtn(savedTheme);
+
+  function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    updateToggleBtn(next);
+  }
+
+  function updateToggleBtn(theme) {
+    const btn = document.getElementById('theme-btn');
+    if (!btn) return;
+    btn.textContent = theme === 'light' ? '🌙 Dark Mode' : '☀️ Light Mode';
+  }
+
+  // ── Filter ──
+  function setFilter(f, btn) {
+    currentFilter = f;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderOrders(window._lastOrders || []);
+  }
+
+  function formatTime(ts) {
+    const d = new Date(ts);
+    return d.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' }) +
+           ' — ' + d.toLocaleDateString('en-PK', { day: 'numeric', month: 'short' });
+  }
+
+  function updateStats(orders) {
+    const pending   = orders.filter(o => !o.status || o.status === 'pending').length;
+    const preparing = orders.filter(o => o.status === 'preparing').length;
+    const delivered = orders.filter(o => o.status === 'delivered').length;
+    const revenue   = orders.reduce((s, o) => s + (o.total || 0), 0);
+
+    document.getElementById('stat-total').textContent     = orders.length;
+    document.getElementById('stat-pending').textContent   = pending;
+    document.getElementById('stat-preparing').textContent = preparing;
+    document.getElementById('stat-delivered').textContent = delivered;
+    document.getElementById('stat-revenue').textContent   = 'Rs. ' + revenue.toLocaleString();
+  }
+
+  function renderOrders(orders) {
+    window._lastOrders = orders;
+    const grid = document.getElementById('orders-grid');
+
+    const filtered = currentFilter === 'all'
+      ? orders
+      : orders.filter(o => (o.status || 'pending') === currentFilter);
+
+    const sorted = [...filtered].reverse();
+
+    if (sorted.length === 0) {
+      grid.innerHTML = `<div class="empty"><h2>No orders yet</h2><p>Waiting for customers...</p></div>`;
+      return;
+    }
+
+    grid.innerHTML = sorted.map((order) => {
+      const isNew   = !knownIds.has(order.timestamp);
+      const status  = order.status || 'pending';
+      const orderId = '#' + String(orders.indexOf(order) + 1).padStart(3, '0');
+
+      const itemsHtml = (order.items || []).map(item =>
+        `<div class="item-row">
+          <span>${item.name} x${item.qty}</span>
+          <span>Rs. ${item.qty * item.price}</span>
+        </div>`
+      ).join('');
+
+      return `
+        <div class="order-card ${isNew ? 'new-order' : ''}" id="card-${order.timestamp}">
+          <div class="card-header">
+            <div>
+              <div class="order-id">${orderId}</div>
+              <div class="order-time">${formatTime(order.timestamp)}</div>
+            </div>
+            <span class="status-badge status-${status}">${status}</span>
+          </div>
+          <div class="card-body">
+            <div class="phone-row">
+              👤 ${order.name || 'Guest'} &nbsp;|&nbsp; 📱 +${order.phone}
+            </div>
+            <div class="items-list">${itemsHtml}</div>
+            <div class="total-row">
+              <span>Total</span>
+              <span>Rs. ${order.total}</span>
+            </div>
+            <div class="address-row">📍 ${order.address}</div>
+          </div>
+          <div class="status-actions">
+            <button class="btn-status btn-preparing"
+              onclick="updateStatus('${order.timestamp}', 'preparing')"
+              ${status !== 'pending' ? 'disabled' : ''}>
+              Mark Preparing
+            </button>
+            <button class="btn-status btn-delivered"
+              onclick="updateStatus('${order.timestamp}', 'delivered')"
+              ${status === 'delivered' ? 'disabled' : ''}>
+              Mark Delivered
+            </button>
+          </div>
+        </div>`;
+    }).join('');
+
+    orders.forEach(o => knownIds.add(o.timestamp));
+  }
+
+  async function updateStatus(timestamp, newStatus) {
+    await fetch('/orders/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timestamp, status: newStatus })
+    });
+    fetchOrders();
+  }
+
+  async function fetchOrders() {
+    try {
+      const r = await fetch('/orders/data');
+      const data = await r.json();
+      updateStats(data.orders);
+      renderOrders(data.orders);
+    } catch(e) {
+      console.error('Fetch error:', e);
+    }
+  }
+
+  fetchOrders();
+  setInterval(fetchOrders, 5000);
+</script>
+</body>
+</html>
