@@ -236,7 +236,7 @@ ORDERING RULES:
 11. If the user asks who you are, say: "I am the Spice Garden ordering assistant. I am here to help you place your food order."
 12. If the user asks unrelated questions (politics, general knowledge, other restaurants), respond with: "I can only help with Spice Garden orders. Would you like to see our menu?"
 13. Remember the customer's current order throughout the conversation — always show the running total when they add items.
-14. If the customer says "show menu" or any variation, always show ALL categories with ALL items and prices in one message.
+14. If the customer asks for the menu, tell them the menu image has been sent. Do NOT list all menu items in text.
 15. UPSELLING: When a customer adds a main dish, suggest one relevant add-on from the menu. Keep it to one short line. Do NOT suggest breads (naan, roti) with rice dishes (biryani, pulao) — suggest a drink or dessert instead.
 
 Stay strictly focused on food ordering for Spice Garden only."""
@@ -281,6 +281,11 @@ def get_history(phone_number):
     return conversations[phone_number]["messages"]
 
 
+MENU_IMAGE_URL = "https://raw.githubusercontent.com/AnasAshfaq20/WhatsApp-Bot/main/spice_garden_menu.png"
+MENU_KEYWORDS  = {"menu", "show menu", "what do you have", "what's on the menu",
+                  "whats on the menu", "food menu", "see menu", "view menu", "menue"}
+
+
 def send_whatsapp(to, body):
     headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
     payload = {
@@ -292,6 +297,19 @@ def send_whatsapp(to, body):
     r = requests.post(META_API_URL, headers=headers, json=payload)
     if not r.ok:
         print(f"⚠️ Meta API error: {r.status_code} {r.text}")
+
+
+def send_whatsapp_image(to, image_url, caption=""):
+    headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
+    payload = {
+        "messaging_product": "whatsapp",
+        "to":   to,
+        "type": "image",
+        "image": {"link": image_url, "caption": caption},
+    }
+    r = requests.post(META_API_URL, headers=headers, json=payload)
+    if not r.ok:
+        print(f"⚠️ Meta API image error: {r.status_code} {r.text}")
 
 
 def format_bill(order_data):
@@ -466,6 +484,11 @@ def receive_webhook():
             print(f"Sender: {sender} | MsgID: {message_id} | Msg: {incoming_msg}")
         else:
             send_whatsapp(sender, "Sorry, I can only handle text and voice messages.")
+            return "EVENT_RECEIVED", 200
+
+        # Send menu image if user is asking for the menu
+        if incoming_msg.lower().strip() in MENU_KEYWORDS:
+            send_whatsapp_image(sender, MENU_IMAGE_URL, "Here's our menu. What would you like to order?")
             return "EVENT_RECEIVED", 200
 
         history = get_history(sender)
