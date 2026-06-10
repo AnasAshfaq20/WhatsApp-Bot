@@ -1,8 +1,3 @@
-"""
-WhatsApp Restaurant Bot
-Stack: Flask + Meta WhatsApp Cloud API + Groq via LangChain + PostgreSQL (Supabase)
-"""
-
 import os
 import json
 import psycopg2
@@ -14,13 +9,15 @@ from flask import Flask, request, render_template, jsonify, session, redirect, u
 from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from dotenv import load_dotenv
+from groq import Groq
 
 load_dotenv(override=True, encoding="utf-8-sig")
 
 # ---------- Setup ----------
 app = Flask(__name__)
 
-llm = ChatGroq(model="openai/gpt-oss-120b")
+llm         = ChatGroq(model="openai/gpt-oss-120b")
+groq_client = Groq()
 
 WHATSAPP_TOKEN     = os.getenv("WHATSAPP_TOKEN")
 WHATSAPP_PHONE_ID  = os.getenv("WHATSAPP_PHONE_ID")
@@ -248,6 +245,33 @@ Stay strictly focused on food ordering for Spice Garden only."""
 # ──────────────────────────────────────────────
 # HELPERS
 # ──────────────────────────────────────────────
+def transcribe_audio(media_id):
+    """Download WhatsApp audio and transcribe it via Groq Whisper."""
+    headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}"}
+
+    # Step 1: Get download URL from Meta
+    url_resp = requests.get(
+        f"https://graph.facebook.com/v19.0/{media_id}",
+        headers=headers
+    )
+    if not url_resp.ok:
+        raise Exception(f"Failed to get media URL: {url_resp.text}")
+    download_url = url_resp.json()["url"]
+
+    # Step 2: Download the audio bytes
+    audio_resp = requests.get(download_url, headers=headers)
+    if not audio_resp.ok:
+        raise Exception(f"Failed to download audio: {audio_resp.text}")
+
+    # Step 3: Transcribe via Groq Whisper
+    transcription = groq_client.audio.transcriptions.create(
+        file=("voice.ogg", audio_resp.content, "audio/ogg"),
+        model="whisper-large-v3",
+        language="en",
+    )
+    return transcription.text.strip()
+
+
 def get_history(phone_number):
     if phone_number not in conversations:
         conversations[phone_number] = {
@@ -428,12 +452,21 @@ def receive_webhook():
             if len(processed_message_ids) > 1000:
                 processed_message_ids.pop()
 
-        if m_type != "text":
-            send_whatsapp(sender, "Sorry, I can only handle text messages right now.")
+        if m_type == "audio":
+            try:
+                media_id     = msg["audio"]["id"]
+                incoming_msg = transcribe_audio(media_id)
+                print(f"Sender: {sender} | Voice transcribed: {incoming_msg}")
+            except Exception as e:
+                print(f"⚠️ Transcription failed: {e}")
+                send_whatsapp(sender, "Sorry, I could not understand your voice message. Please try again or type your order.")
+                return "EVENT_RECEIVED", 200
+        elif m_type == "text":
+            incoming_msg = msg["text"]["body"].strip()
+            print(f"Sender: {sender} | MsgID: {message_id} | Msg: {incoming_msg}")
+        else:
+            send_whatsapp(sender, "Sorry, I can only handle text and voice messages.")
             return "EVENT_RECEIVED", 200
-
-        incoming_msg = msg["text"]["body"].strip()
-        print(f"Sender: {sender} | MsgID: {message_id} | Msg: {incoming_msg}")
 
         history = get_history(sender)
         history.append(HumanMessage(content=incoming_msg))
