@@ -385,7 +385,7 @@
     grid.innerHTML = sorted.map((order) => {
       const isNew   = !knownIds.has(order.timestamp);
       const status  = order.status || 'pending';
-      const orderId = '#' + String(orders.indexOf(order) + 1).padStart(3, '0');
+      const orderId = '#' + String(order.id).padStart(3, '0');
 
       const itemsHtml = (order.items || []).map(item =>
         `<div class="item-row">
@@ -416,12 +416,12 @@
           </div>
           <div class="status-actions">
             <button class="btn-status btn-preparing"
-              onclick="updateStatus('${order.timestamp}', 'preparing')"
+              onclick="updateStatus(${order.id}, 'preparing')"
               ${status !== 'pending' ? 'disabled' : ''}>
               Mark Preparing
             </button>
             <button class="btn-status btn-delivered"
-              onclick="updateStatus('${order.timestamp}', 'delivered')"
+              onclick="updateStatus(${order.id}, 'delivered')"
               ${status === 'delivered' ? 'disabled' : ''}>
               Mark Delivered
             </button>
@@ -432,11 +432,11 @@
     orders.forEach(o => knownIds.add(o.timestamp));
   }
 
-  async function updateStatus(timestamp, newStatus) {
+  async function updateStatus(id, newStatus) {
     await fetch('/orders/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ timestamp, status: newStatus })
+      body: JSON.stringify({ id, status: newStatus })
     });
     fetchOrders();
   }

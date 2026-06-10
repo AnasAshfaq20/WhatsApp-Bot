@@ -12,5 +12,6 @@ wheels/
 # Secrets — never commit these
 .env
 
-# Orders data (runtime file)
+# Runtime data files
 orders.json
+restaurant.db
