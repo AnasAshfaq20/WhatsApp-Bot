@@ -236,7 +236,7 @@ ORDERING RULES:
 11. If the user asks who you are, say: "I am the Spice Garden ordering assistant. I am here to help you place your food order."
 12. If the user asks unrelated questions (politics, general knowledge, other restaurants), respond with: "I can only help with Spice Garden orders. Would you like to see our menu?"
 13. Remember the customer's current order throughout the conversation — always show the running total when they add items.
-14. If the customer asks for the menu, tell them the menu image has been sent. Do NOT list all menu items in text.
+14. Whenever you want to show the menu to the customer (they ask for it, say yes to seeing it, or ask what food is available), output the tag [SEND_MENU] on its own line. Do NOT list menu items in text — the image will be sent automatically.
 15. UPSELLING: When a customer adds a main dish, suggest one relevant add-on from the menu. Keep it to one short line. Do NOT suggest breads (naan, roti) with rice dishes (biryani, pulao) — suggest a drink or dessert instead.
 
 Stay strictly focused on food ordering for Spice Garden only."""
@@ -282,8 +282,6 @@ def get_history(phone_number):
 
 
 MENU_IMAGE_URL = "https://raw.githubusercontent.com/AnasAshfaq20/WhatsApp-Bot/main/spice_garden_menu.png"
-MENU_KEYWORDS  = {"menu", "show menu", "what do you have", "what's on the menu",
-                  "whats on the menu", "food menu", "see menu", "view menu", "menue"}
 
 
 def send_whatsapp(to, body):
@@ -486,17 +484,19 @@ def receive_webhook():
             send_whatsapp(sender, "Sorry, I can only handle text and voice messages.")
             return "EVENT_RECEIVED", 200
 
-        # Send menu image if user is asking for the menu
-        if incoming_msg.lower().strip() in MENU_KEYWORDS:
-            send_whatsapp_image(sender, MENU_IMAGE_URL, "Here's our menu. What would you like to order?")
-            return "EVENT_RECEIVED", 200
-
         history = get_history(sender)
         history.append(HumanMessage(content=incoming_msg))
 
         response = llm.invoke(history)
         reply    = response.content
         history.append(AIMessage(content=reply))
+
+        # If LLM wants to show the menu, send the image and strip the tag
+        if "[SEND_MENU]" in reply:
+            send_whatsapp_image(sender, MENU_IMAGE_URL, "Here's our menu. What would you like to order?")
+            reply = reply.replace("[SEND_MENU]", "").strip()
+            if not reply:
+                return "EVENT_RECEIVED", 200
 
         reply = extract_and_log_order(reply, sender)
         print(f"Reply: {reply}")
