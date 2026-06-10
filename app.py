@@ -56,7 +56,7 @@ def init_db():
             category TEXT    NOT NULL,
             name     TEXT    NOT NULL,
             price    INTEGER NOT NULL,
-            desc     TEXT    DEFAULT ''
+            description TEXT    DEFAULT ''
         )
     """)
 
@@ -116,7 +116,7 @@ def _seed_from_json(cursor):
     for category, items in data["categories"].items():
         for item in items:
             cursor.execute(
-                "INSERT INTO menu (category, name, price, desc) VALUES (%s, %s, %s, %s)",
+                "INSERT INTO menu (category, name, price, description) VALUES (%s, %s, %s, %s)",
                 (category, item["name"], item["price"], item.get("desc", ""))
             )
 
@@ -134,7 +134,7 @@ def get_menu_dict():
     """Return menu structured the same way as menu.json for the system prompt."""
     conn = get_db()
     c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    c.execute("SELECT category, name, price, desc FROM menu ORDER BY id")
+    c.execute("SELECT category, name, price, description FROM menu ORDER BY id")
     rows = c.fetchall()
     conn.close()
     info = get_restaurant_info()
@@ -147,7 +147,7 @@ def get_menu_dict():
         categories[cat].append({
             "name":  row["name"],
             "price": row["price"],
-            "desc":  row["desc"],
+            "desc":  row["description"],
         })
 
     return {**info, "categories": categories}
