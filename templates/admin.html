@@ -272,7 +272,11 @@
       <div class="field full"><label>Delivery Info</label><input id="f-delivery_info" placeholder="Free delivery within 5km"></div>
       <div class="field full"><label>WhatsApp Token</label><input id="f-whatsapp_token" placeholder="EAAxxxx..."></div>
       <div class="field"><label>WhatsApp Phone ID</label><input id="f-whatsapp_phone_id" placeholder="1132931713234299"></div>
-      <div class="field"><label>Menu Image URL</label><input id="f-menu_image_url" placeholder="https://..."></div>
+      <div class="field full">
+        <label>Menu Image (PNG/JPG/WebP, max 5 MB)</label>
+        <input type="file" id="f-menu_file" accept="image/png,image/jpeg,image/webp">
+        <div id="current-image-note" style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;"></div>
+      </div>
     </div>
     <div class="error-msg" id="modal-error"></div>
     <div id="creds-result"></div>
@@ -301,7 +305,7 @@
   }
 
   const FIELDS = ['username','owner_name','restaurant_name','hours','admin_phone',
-                  'location','delivery_info','whatsapp_token','whatsapp_phone_id','menu_image_url'];
+                  'location','delivery_info','whatsapp_token','whatsapp_phone_id'];
 
   async function fetchOwners() {
     const r = await fetch('/admin/owners');
@@ -336,6 +340,8 @@
     editingId = null;
     document.getElementById('modal-title').textContent = 'Add Owner';
     FIELDS.forEach(f => document.getElementById('f-' + f).value = '');
+    document.getElementById('f-menu_file').value = '';
+    document.getElementById('current-image-note').textContent = '';
     document.getElementById('f-username').disabled = false;
     document.getElementById('modal-error').textContent = '';
     document.getElementById('creds-result').innerHTML = '';
@@ -347,6 +353,9 @@
     editingId = o.id;
     document.getElementById('modal-title').textContent = 'Edit Owner — ' + o.restaurant_name;
     FIELDS.forEach(f => document.getElementById('f-' + f).value = o[f] || '');
+    document.getElementById('f-menu_file').value = '';
+    document.getElementById('current-image-note').textContent =
+      o.menu_image_url ? 'Current image: ' + o.menu_image_url + ' (choose a file to replace it)' : 'No menu image uploaded yet.';
     document.getElementById('f-username').disabled = true;
     document.getElementById('modal-error').textContent = '';
     document.getElementById('creds-result').innerHTML = '';
@@ -363,6 +372,16 @@
     const data = {};
     FIELDS.forEach(f => data[f] = document.getElementById('f-' + f).value.trim());
     return data;
+  }
+
+  async function uploadMenuImage(ownerId) {
+    const fileInput = document.getElementById('f-menu_file');
+    if (!fileInput.files.length) return null;
+    const fd = new FormData();
+    fd.append('image', fileInput.files[0]);
+    const r = await fetch(`/admin/owners/${ownerId}/menu-image`, { method: 'POST', body: fd });
+    const res = await r.json();
+    return res.success ? null : (res.error || 'Image upload failed');
   }
 
   async function saveOwner() {
@@ -382,6 +401,12 @@
     if (!res.success) {
       errEl.textContent = res.error || 'Something went wrong';
       return;
+    }
+
+    // Upload menu image if one was chosen
+    const imgErr = await uploadMenuImage(editingId || res.owner_id);
+    if (imgErr) {
+      errEl.textContent = 'Owner saved, but: ' + imgErr;
     }
 
     if (res.credentials) {

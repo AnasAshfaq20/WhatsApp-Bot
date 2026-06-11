@@ -54,6 +54,10 @@ def init_db():
     """)
     c.execute("ALTER TABLE menu ADD COLUMN IF NOT EXISTS owner_id INTEGER")
 
+    # Uploaded menu image, stored in the DB and served from /menu-image/<id>
+    c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS menu_image BYTEA")
+    c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS menu_image_mime TEXT DEFAULT ''")
+
     c.execute("""
         CREATE TABLE IF NOT EXISTS orders (
             id         SERIAL PRIMARY KEY,
@@ -193,10 +197,16 @@ def delete_owner(owner_id):
     conn.close()
 
 
+# Owner columns without the raw image bytes (too heavy for regular queries)
+OWNER_COLS = ("id, username, password_hash, owner_name, restaurant_name, hours, "
+              "location, delivery_info, whatsapp_token, whatsapp_phone_id, "
+              "admin_phone, menu_image_url, active, created_at")
+
+
 def get_owner_by_id(owner_id):
     conn = get_db()
     c = dict_cursor(conn)
-    c.execute("SELECT * FROM owners WHERE id = %s", (owner_id,))
+    c.execute(f"SELECT {OWNER_COLS} FROM owners WHERE id = %s", (owner_id,))
     row = c.fetchone()
     conn.close()
     return dict(row) if row else None
@@ -205,7 +215,7 @@ def get_owner_by_id(owner_id):
 def get_owner_by_username(username):
     conn = get_db()
     c = dict_cursor(conn)
-    c.execute("SELECT * FROM owners WHERE username = %s", (username,))
+    c.execute(f"SELECT {OWNER_COLS} FROM owners WHERE username = %s", (username,))
     row = c.fetchone()
     conn.close()
     return dict(row) if row else None
@@ -214,7 +224,7 @@ def get_owner_by_username(username):
 def get_owner_by_phone_id(whatsapp_phone_id):
     conn = get_db()
     c = dict_cursor(conn)
-    c.execute("SELECT * FROM owners WHERE whatsapp_phone_id = %s AND active = TRUE",
+    c.execute(f"SELECT {OWNER_COLS} FROM owners WHERE whatsapp_phone_id = %s AND active = TRUE",
               (whatsapp_phone_id,))
     row = c.fetchone()
     conn.close()
@@ -224,8 +234,9 @@ def get_owner_by_phone_id(whatsapp_phone_id):
 def get_all_owners():
     conn = get_db()
     c = dict_cursor(conn)
-    c.execute("""
-        SELECT o.*, COUNT(ord.id) AS order_count,
+    c.execute(f"""
+        SELECT {', '.join('o.' + col.strip() for col in OWNER_COLS.split(','))},
+               COUNT(ord.id) AS order_count,
                COALESCE(SUM(ord.total), 0) AS revenue
         FROM owners o
         LEFT JOIN orders ord ON ord.owner_id = o.id
@@ -240,6 +251,29 @@ def get_all_owners():
         d.pop("password_hash", None)
         result.append(d)
     return result
+
+
+def save_menu_image(owner_id, data, mime, public_url):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        "UPDATE owners SET menu_image = %s, menu_image_mime = %s, menu_image_url = %s WHERE id = %s",
+        (psycopg2.Binary(data), mime, public_url, owner_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_menu_image(owner_id):
+    """Returns (bytes, mime) or None."""
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT menu_image, menu_image_mime FROM owners WHERE id = %s", (owner_id,))
+    row = c.fetchone()
+    conn.close()
+    if row and row[0]:
+        return bytes(row[0]), row[1] or "image/png"
+    return None
 
 
 # ──────────────────────────────────────────────

@@ -1,6 +1,7 @@
-from flask import Blueprint, request, render_template, jsonify, session
+from flask import Blueprint, request, render_template, jsonify, session, Response
 
-from ..db import (get_owner_by_id, get_orders_for_owner, update_order_status_db)
+from ..db import (get_owner_by_id, get_orders_for_owner, update_order_status_db,
+                  get_menu_image)
 from ..services import bot, whatsapp
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -18,6 +19,17 @@ def _current_owner_id():
 @dashboard_bp.route("/", methods=["GET"])
 def health():
     return {"status": "ok"}
+
+
+@dashboard_bp.route("/menu-image/<int:owner_id>", methods=["GET"])
+def menu_image(owner_id):
+    """Public — WhatsApp fetches the uploaded menu image from here."""
+    img = get_menu_image(owner_id)
+    if not img:
+        return "Not found", 404
+    data, mime = img
+    return Response(data, mimetype=mime,
+                    headers={"Cache-Control": "public, max-age=300"})
 
 
 @dashboard_bp.route("/orders", methods=["GET"])

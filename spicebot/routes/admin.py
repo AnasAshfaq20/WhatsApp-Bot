@@ -4,8 +4,11 @@ import string
 from flask import Blueprint, request, render_template, jsonify
 
 from ..db import (create_owner, update_owner, delete_owner, get_all_owners,
-                  get_owner_by_username)
+                  get_owner_by_username, save_menu_image)
 from .auth import admin_required
+
+ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
+MAX_IMAGE_BYTES     = 5 * 1024 * 1024  # 5 MB
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -83,3 +86,24 @@ def reset_owner_password(owner_id):
 def remove_owner(owner_id):
     delete_owner(owner_id)
     return jsonify({"success": True})
+
+
+@admin_bp.route("/admin/owners/<int:owner_id>/menu-image", methods=["POST"])
+@admin_required
+def upload_menu_image(owner_id):
+    file = request.files.get("image")
+    if not file or not file.filename:
+        return jsonify({"success": False, "error": "No image file provided"})
+
+    mime = file.mimetype or ""
+    if mime not in ALLOWED_IMAGE_TYPES:
+        return jsonify({"success": False, "error": "Only PNG, JPG or WebP images are allowed"})
+
+    data = file.read()
+    if len(data) > MAX_IMAGE_BYTES:
+        return jsonify({"success": False, "error": "Image too large (max 5 MB)"})
+
+    # Public URL served by this app — WhatsApp fetches the image from here
+    public_url = request.url_root.rstrip("/") + f"/menu-image/{owner_id}"
+    save_menu_image(owner_id, data, mime, public_url)
+    return jsonify({"success": True, "url": public_url})
