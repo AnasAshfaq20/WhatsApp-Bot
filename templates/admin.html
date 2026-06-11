@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Admin — Restaurant Owners</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    [data-theme="light"] {
+      --bg:          #f5f5f5;
+      --card-bg:     #ffffff;
+      --header-bg:   #1a1a2e;
+      --text:        #333333;
+      --text-muted:  #888888;
+      --border:      #e5e5e5;
+      --shadow:      rgba(0,0,0,0.07);
+      --input-bg:    #ffffff;
+      --toggle-bg:   #e2e8f0;
+    }
+    [data-theme="dark"] {
+      --bg:          #0f0f1a;
+      --card-bg:     #1e1e2e;
+      --header-bg:   #0a0a14;
+      --text:        #e2e8f0;
+      --text-muted:  #64748b;
+      --border:      #2d2d42;
+      --shadow:      rgba(0,0,0,0.3);
+      --input-bg:    #16162a;
+      --toggle-bg:   #2d2d42;
+    }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      transition: background 0.3s, color 0.3s;
+    }
+
+    header {
+      background: var(--header-bg);
+      color: white;
+      padding: 18px 30px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header h1 { font-size: 1.4rem; letter-spacing: 1px; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+
+    .theme-toggle {
+      background: var(--toggle-bg);
+      border: none;
+      border-radius: 50px;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .container { padding: 24px 30px; max-width: 1200px; margin: 0 auto; }
+
+    .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .toolbar h2 { font-size: 1.15rem; }
+
+    .btn {
+      border: none;
+      border-radius: 8px;
+      padding: 10px 18px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn-primary { background: #6366f1; color: white; }
+    .btn-danger  { background: #ef4444; color: white; }
+    .btn-warn    { background: #f39c12; color: white; }
+    .btn-sm      { padding: 6px 12px; font-size: 0.78rem; }
+
+    /* Owners table */
+    .owners-table {
+      width: 100%;
+      background: var(--card-bg);
+      border-radius: 12px;
+      box-shadow: 0 2px 10px var(--shadow);
+      border-collapse: collapse;
+      overflow: hidden;
+    }
+    .owners-table th, .owners-table td {
+      text-align: left;
+      padding: 13px 16px;
+      font-size: 0.86rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .owners-table th { color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .owners-table tr:last-child td { border-bottom: none; }
+    .owners-table a { color: #6366f1; font-weight: 600; text-decoration: none; }
+
+    .badge {
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+    .badge-active   { background: #d1e7dd; color: #0a3622; }
+    .badge-inactive { background: #f8d7da; color: #842029; }
+    [data-theme="dark"] .badge-active   { background: #052e16; color: #4ade80; }
+    [data-theme="dark"] .badge-inactive { background: #450a0a; color: #f87171; }
+
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 50;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 40px 16px;
+      overflow-y: auto;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--card-bg);
+      border-radius: 14px;
+      padding: 26px;
+      width: 100%;
+      max-width: 540px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    }
+    .modal h3 { margin-bottom: 18px; font-size: 1.1rem; }
+
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .form-grid .full { grid-column: 1 / -1; }
+    .field label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .field input {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--input-bg);
+      color: var(--text);
+      font-size: 0.86rem;
+    }
+    .field input:focus { outline: 2px solid #6366f1; border-color: transparent; }
+
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+
+    /* Credentials box */
+    .creds-box {
+      background: var(--input-bg);
+      border: 2px dashed #6366f1;
+      border-radius: 10px;
+      padding: 18px;
+      margin-top: 14px;
+      font-family: Consolas, monospace;
+      font-size: 0.95rem;
+      line-height: 1.8;
+    }
+    .creds-note { font-size: 0.75rem; color: var(--text-muted); margin-top: 8px; }
+
+    .error-msg { color: #ef4444; font-size: 0.82rem; margin-top: 10px; }
+
+    .empty { text-align: center; padding: 50px; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Admin — Restaurant Owners</h1>
+  <div class="header-right">
+    <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn">🌙 Dark Mode</button>
+    <a href="/logout" style="background:#ef4444;color:white;border-radius:50px;padding:6px 14px;font-size:0.82rem;font-weight:600;text-decoration:none;">Logout</a>
+  </div>
+</header>
+
+<div class="container">
+  <div class="toolbar">
+    <h2>All Owners</h2>
+    <button class="btn btn-primary" onclick="openCreate()">+ Add Owner</button>
+  </div>
+
+  <table class="owners-table">
+    <thead>
+      <tr>
+        <th>ID</th><th>Restaurant</th><th>Owner</th><th>Username</th>
+        <th>WhatsApp Phone ID</th><th>Orders</th><th>Revenue</th><th>Status</th><th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="owners-body"></tbody>
+  </table>
+  <div class="empty" id="empty-state" style="display:none;">No owners yet. Click "+ Add Owner" to create one.</div>
+</div>
+
+<!-- Create / Edit modal -->
+<div class="modal-overlay" id="owner-modal">
+  <div class="modal">
+    <h3 id="modal-title">Add Owner</h3>
+    <div class="form-grid">
+      <div class="field"><label>Username *</label><input id="f-username" placeholder="e.g. tandooripalace"></div>
+      <div class="field"><label>Owner Name *</label><input id="f-owner_name" placeholder="e.g. Ali Raza"></div>
+      <div class="field full"><label>Restaurant Name *</label><input id="f-restaurant_name" placeholder="e.g. Tandoori Palace"></div>
+      <div class="field"><label>Hours</label><input id="f-hours" placeholder="11 AM - 11 PM"></div>
+      <div class="field"><label>Owner Alert Phone</label><input id="f-admin_phone" placeholder="9230xxxxxxxx"></div>
+      <div class="field full"><label>Location</label><input id="f-location" placeholder="Address"></div>
+      <div class="field full"><label>Delivery Info</label><input id="f-delivery_info" placeholder="Free delivery within 5km"></div>
+      <div class="field full"><label>WhatsApp Token</label><input id="f-whatsapp_token" placeholder="EAAxxxx..."></div>
+      <div class="field"><label>WhatsApp Phone ID</label><input id="f-whatsapp_phone_id" placeholder="1132931713234299"></div>
+      <div class="field"><label>Menu Image URL</label><input id="f-menu_image_url" placeholder="https://..."></div>
+    </div>
+    <div class="error-msg" id="modal-error"></div>
+    <div id="creds-result"></div>
+    <div class="modal-actions">
+      <button class="btn" style="background:var(--toggle-bg);color:var(--text);" onclick="closeModal()">Close</button>
+      <button class="btn btn-primary" id="save-btn" onclick="saveOwner()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let editingId = null;
+
+  // ── Theme ──
+  const savedTheme = localStorage.getItem('theme') || 'light';
+  document.documentElement.setAttribute('data-theme', savedTheme);
+  updateToggleBtn(savedTheme);
+  function toggleTheme() {
+    const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    updateToggleBtn(next);
+  }
+  function updateToggleBtn(theme) {
+    document.getElementById('theme-btn').textContent = theme === 'light' ? '🌙 Dark Mode' : '☀️ Light Mode';
+  }
+
+  const FIELDS = ['username','owner_name','restaurant_name','hours','admin_phone',
+                  'location','delivery_info','whatsapp_token','whatsapp_phone_id','menu_image_url'];
+
+  async function fetchOwners() {
+    const r = await fetch('/admin/owners');
+    const data = await r.json();
+    renderOwners(data.owners);
+  }
+
+  function renderOwners(owners) {
+    const body = document.getElementById('owners-body');
+    document.getElementById('empty-state').style.display = owners.length ? 'none' : 'block';
+    body.innerHTML = owners.map(o => `
+      <tr>
+        <td>#${o.id}</td>
+        <td><a href="/orders?owner_id=${o.id}">${o.restaurant_name}</a></td>
+        <td>${o.owner_name}</td>
+        <td>${o.username}</td>
+        <td>${o.whatsapp_phone_id || '—'}</td>
+        <td>${o.order_count}</td>
+        <td>Rs. ${Number(o.revenue).toLocaleString()}</td>
+        <td><span class="badge ${o.active ? 'badge-active' : 'badge-inactive'}">${o.active ? 'Active' : 'Disabled'}</span></td>
+        <td class="actions">
+          <button class="btn btn-primary btn-sm" onclick='openEdit(${JSON.stringify(o)})'>Edit</button>
+          <button class="btn btn-warn btn-sm" onclick="resetPassword(${o.id}, '${o.username}')">Reset PW</button>
+          <button class="btn btn-sm" style="background:var(--toggle-bg);color:var(--text);"
+                  onclick="toggleActive(${o.id}, ${o.active})">${o.active ? 'Disable' : 'Enable'}</button>
+          <button class="btn btn-danger btn-sm" onclick="removeOwner(${o.id}, '${o.restaurant_name}')">Delete</button>
+        </td>
+      </tr>`).join('');
+  }
+
+  function openCreate() {
+    editingId = null;
+    document.getElementById('modal-title').textContent = 'Add Owner';
+    FIELDS.forEach(f => document.getElementById('f-' + f).value = '');
+    document.getElementById('f-username').disabled = false;
+    document.getElementById('modal-error').textContent = '';
+    document.getElementById('creds-result').innerHTML = '';
+    document.getElementById('save-btn').style.display = '';
+    document.getElementById('owner-modal').classList.add('open');
+  }
+
+  function openEdit(o) {
+    editingId = o.id;
+    document.getElementById('modal-title').textContent = 'Edit Owner — ' + o.restaurant_name;
+    FIELDS.forEach(f => document.getElementById('f-' + f).value = o[f] || '');
+    document.getElementById('f-username').disabled = true;
+    document.getElementById('modal-error').textContent = '';
+    document.getElementById('creds-result').innerHTML = '';
+    document.getElementById('save-btn').style.display = '';
+    document.getElementById('owner-modal').classList.add('open');
+  }
+
+  function closeModal() {
+    document.getElementById('owner-modal').classList.remove('open');
+    fetchOwners();
+  }
+
+  function formData() {
+    const data = {};
+    FIELDS.forEach(f => data[f] = document.getElementById('f-' + f).value.trim());
+    return data;
+  }
+
+  async function saveOwner() {
+    const data = formData();
+    const errEl = document.getElementById('modal-error');
+    errEl.textContent = '';
+
+    const url    = editingId ? `/admin/owners/${editingId}` : '/admin/owners';
+    const method = editingId ? 'PUT' : 'POST';
+    const r = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const res = await r.json();
+
+    if (!res.success) {
+      errEl.textContent = res.error || 'Something went wrong';
+      return;
+    }
+
+    if (res.credentials) {
+      // Show generated credentials ONCE
+      document.getElementById('creds-result').innerHTML = `
+        <div class="creds-box">
+          Username: <b>${res.credentials.username}</b><br>
+          Password: <b>${res.credentials.password}</b>
+        </div>
+        <div class="creds-note">Copy these now and share with the owner — the password is not shown again.</div>`;
+      document.getElementById('save-btn').style.display = 'none';
+    } else {
+      closeModal();
+    }
+  }
+
+  async function resetPassword(id, username) {
+    if (!confirm(`Generate a new password for ${username}?`)) return;
+    const r = await fetch(`/admin/owners/${id}/reset-password`, { method: 'POST' });
+    const res = await r.json();
+    if (res.success) {
+      alert(`New credentials for ${username}:\n\nUsername: ${username}\nPassword: ${res.password}\n\nCopy now — it is not shown again.`);
+    }
+  }
+
+  async function toggleActive(id, active) {
+    await fetch(`/admin/owners/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: !active })
+    });
+    fetchOwners();
+  }
+
+  async function removeOwner(id, name) {
+    if (!confirm(`Delete "${name}" and ALL their orders and menu? This cannot be undone.`)) return;
+    await fetch(`/admin/owners/${id}`, { method: 'DELETE' });
+    fetchOwners();
+  }
+
+  fetchOwners();
+</script>
+</body>
+</html>

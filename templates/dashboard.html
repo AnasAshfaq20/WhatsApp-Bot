@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Spice Garden — Orders Dashboard</title>
+  <title>{{ restaurant_name }} — Orders Dashboard</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -274,9 +274,12 @@
 <body>
 
 <header>
-  <h1>Spice Garden — Live Orders</h1>
+  <h1>{{ restaurant_name }} — Live Orders</h1>
   <div class="header-right">
     <span><span id="live-dot"></span>Auto-refreshing every 5 seconds</span>
+    {% if is_admin %}
+    <a href="/admin" style="background:#6366f1;color:white;border-radius:50px;padding:6px 14px;font-size:0.82rem;font-weight:600;text-decoration:none;">← Admin Panel</a>
+    {% endif %}
     <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn">🌙 Dark Mode</button>
     <a href="/logout" style="background:#ef4444;color:white;border-radius:50px;padding:6px 14px;font-size:0.82rem;font-weight:600;text-decoration:none;">Logout</a>
   </div>
@@ -320,6 +323,7 @@
 <script>
   let currentFilter = 'all';
   let knownIds = new Set();
+  const ownerQuery = "{{ ('?owner_id=' ~ owner_id) if is_admin else '' }}";
 
   // ── Theme toggle ──
   const savedTheme = localStorage.getItem('theme') || 'light';
@@ -443,7 +447,7 @@
 
   async function fetchOrders() {
     try {
-      const r = await fetch('/orders/data');
+      const r = await fetch('/orders/data' + ownerQuery);
       const data = await r.json();
       updateStats(data.orders);
       renderOrders(data.orders);

@@ -1,0 +1,24 @@
+import os
+
+from dotenv import load_dotenv
+
+load_dotenv(override=True, encoding="utf-8-sig")
+
+# Super admin (manages owners)
+ADMIN_USERNAME = os.getenv("DASHBOARD_USERNAME", "admin")
+ADMIN_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "spicegarden2024")
+
+SECRET_KEY   = os.getenv("SECRET_KEY", "fallback-secret-key")
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+# Default tenant credentials (used to seed the first owner)
+WHATSAPP_TOKEN    = os.getenv("WHATSAPP_TOKEN")
+WHATSAPP_PHONE_ID = os.getenv("WHATSAPP_PHONE_ID")
+VERIFY_TOKEN      = os.getenv("WHATSAPP_VERIFY_TOKEN")
+ADMIN_PHONE       = os.getenv("ADMIN_PHONE")
+
+GRAPH_API_BASE = "https://graph.facebook.com/v19.0"
+
+DEFAULT_MENU_IMAGE_URL = (
+    "https://raw.githubusercontent.com/AnasAshfaq20/WhatsApp-Bot/main/spice_garden_menu.png"
+)
