@@ -307,6 +307,10 @@ def update_order_status_db(order_id, new_status, owner_id=None):
                   (new_status, order_id, owner_id))
     else:
         c.execute("UPDATE orders SET status = %s WHERE id = %s", (new_status, order_id))
+    if c.rowcount == 0:
+        # Nothing updated — order doesn't exist or belongs to another owner
+        conn.close()
+        return None
     conn.commit()
     c.execute("SELECT * FROM orders WHERE id = %s", (order_id,))
     row = c.fetchone()
