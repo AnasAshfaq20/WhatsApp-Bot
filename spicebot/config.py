@@ -29,6 +29,9 @@ ADMIN_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "spicegarden2024")
 SECRET_KEY   = os.getenv("SECRET_KEY", "fallback-secret-key")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+# Shared secret the voice platform (Vapi) must send to call /voice/order
+VOICE_WEBHOOK_SECRET = os.getenv("VOICE_WEBHOOK_SECRET", "change-this-voice-secret")
+
 # Default tenant credentials (used to seed the first owner)
 WHATSAPP_TOKEN    = os.getenv("WHATSAPP_TOKEN")
 WHATSAPP_PHONE_ID = os.getenv("WHATSAPP_PHONE_ID")

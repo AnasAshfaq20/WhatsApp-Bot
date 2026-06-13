@@ -16,11 +16,13 @@ def create_app():
     from .routes.webhook import webhook_bp
     from .routes.dashboard import dashboard_bp
     from .routes.admin import admin_bp
+    from .routes.voice import voice_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(webhook_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(voice_bp)
 
     init_db()
     return app

@@ -272,6 +272,7 @@
       <div class="field full"><label>Delivery Info</label><input id="f-delivery_info" placeholder="Free delivery within 5km"></div>
       <div class="field full"><label>WhatsApp Token</label><input id="f-whatsapp_token" placeholder="EAAxxxx..."></div>
       <div class="field"><label>WhatsApp Phone ID</label><input id="f-whatsapp_phone_id" placeholder="1132931713234299"></div>
+      <div class="field full"><label>Voice Agent Number (the number customers call)</label><input id="f-voice_phone" placeholder="+1 555 000 1111"></div>
       <div class="field full">
         <label>Menu Image (PNG/JPG/WebP, max 5 MB)</label>
         <input type="file" id="f-menu_file" accept="image/png,image/jpeg,image/webp">
@@ -305,7 +306,7 @@
   }
 
   const FIELDS = ['username','owner_name','restaurant_name','hours','admin_phone',
-                  'location','delivery_info','whatsapp_token','whatsapp_phone_id'];
+                  'location','delivery_info','whatsapp_token','whatsapp_phone_id','voice_phone'];
 
   async function fetchOwners() {
     const r = await fetch('/admin/owners');

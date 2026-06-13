@@ -59,6 +59,9 @@ def init_db():
     c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS menu_image BYTEA")
     c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS menu_image_mime TEXT DEFAULT ''")
 
+    # Voice agent phone number (the number customers call) — routes calls to this owner
+    c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS voice_phone TEXT DEFAULT ''")
+
     c.execute("""
         CREATE TABLE IF NOT EXISTS orders (
             id         SERIAL PRIMARY KEY,
@@ -148,19 +151,19 @@ def _seed_menu_from_json(cursor, owner_id):
 # ──────────────────────────────────────────────
 def create_owner(username, password, owner_name, restaurant_name, hours, location,
                  delivery_info, whatsapp_token, whatsapp_phone_id, admin_phone,
-                 menu_image_url):
+                 menu_image_url, voice_phone=""):
     conn = get_db()
     c = conn.cursor()
     c.execute(
         """INSERT INTO owners (username, password_hash, owner_name, restaurant_name,
                                hours, location, delivery_info,
                                whatsapp_token, whatsapp_phone_id, admin_phone,
-                               menu_image_url, created_at)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                               menu_image_url, voice_phone, created_at)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
            RETURNING id""",
         (username, generate_password_hash(password), owner_name, restaurant_name,
          hours, location, delivery_info, whatsapp_token, whatsapp_phone_id,
-         admin_phone, menu_image_url, datetime.now().isoformat()),
+         admin_phone, menu_image_url, voice_phone, datetime.now().isoformat()),
     )
     owner_id = c.fetchone()[0]
     conn.commit()
@@ -172,7 +175,7 @@ def update_owner(owner_id, fields):
     """Update allowed owner fields. fields: dict of column -> value."""
     allowed = {"owner_name", "restaurant_name", "hours", "location", "delivery_info",
                "whatsapp_token", "whatsapp_phone_id", "admin_phone",
-               "menu_image_url", "active", "username"}
+               "menu_image_url", "voice_phone", "active", "username"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if "password" in fields and fields["password"]:
         updates["password_hash"] = generate_password_hash(fields["password"])
@@ -201,7 +204,7 @@ def delete_owner(owner_id):
 # Owner columns without the raw image bytes (too heavy for regular queries)
 OWNER_COLS = ("id, username, password_hash, owner_name, restaurant_name, hours, "
               "location, delivery_info, whatsapp_token, whatsapp_phone_id, "
-              "admin_phone, menu_image_url, active, created_at")
+              "admin_phone, menu_image_url, voice_phone, active, created_at")
 
 
 def get_owner_by_id(owner_id):
@@ -227,6 +230,23 @@ def get_owner_by_phone_id(whatsapp_phone_id):
     c = dict_cursor(conn)
     c.execute(f"SELECT {OWNER_COLS} FROM owners WHERE whatsapp_phone_id = %s AND active = TRUE",
               (whatsapp_phone_id,))
+    row = c.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_owner_by_voice_phone(voice_phone):
+    """Match the number the customer called. Tolerates +/spaces differences."""
+    digits = "".join(ch for ch in (voice_phone or "") if ch.isdigit())
+    if not digits:
+        return None
+    conn = get_db()
+    c = dict_cursor(conn)
+    # Compare on digits only so "+1 555..." and "1555..." both match
+    c.execute(f"""SELECT {OWNER_COLS} FROM owners
+                  WHERE active = TRUE
+                    AND regexp_replace(voice_phone, '[^0-9]', '', 'g') = %s""",
+              (digits,))
     row = c.fetchone()
     conn.close()
     return dict(row) if row else None

@@ -58,6 +58,7 @@ def add_owner():
         whatsapp_phone_id = data.get("whatsapp_phone_id", ""),
         admin_phone       = data.get("admin_phone", ""),
         menu_image_url    = data.get("menu_image_url", ""),
+        voice_phone       = data.get("voice_phone", ""),
     )
 
     # Plaintext password is returned ONCE so the admin can share it
