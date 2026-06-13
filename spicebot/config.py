@@ -1,8 +1,17 @@
 import os
+from datetime import datetime, timezone, timedelta
 
 from dotenv import load_dotenv
 
 load_dotenv(override=True, encoding="utf-8-sig")
+
+# Pakistan Standard Time (UTC+5) — Render runs in UTC
+PKT = timezone(timedelta(hours=5))
+
+
+def now_pkt():
+    """Current time in Pakistan, regardless of server timezone."""
+    return datetime.now(PKT)
 
 # Super admin (manages owners)
 ADMIN_USERNAME = os.getenv("DASHBOARD_USERNAME", "admin")

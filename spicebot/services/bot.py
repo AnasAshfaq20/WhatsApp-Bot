@@ -6,6 +6,7 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
 from ..db import get_menu_dict, save_order
+from ..config import now_pkt
 from . import whatsapp
 
 llm = ChatGroq(model="openai/gpt-oss-120b")
@@ -43,19 +44,21 @@ ORDERING RULES:
 3. Do NOT use any markdown formatting — no asterisks (*), no underscores (_), no hyphens for bullets, no bold, no italic. Plain text only.
 4. When a customer wants to order, repeat back the order with prices and total.
 5. Do NOT ask for the customer's name at the start. Only ask for their name and delivery address together when they are ready to confirm the order.
-6. When the customer confirms their order, ask: "Please share your name and delivery address to complete the order."
-7. When the order is FINAL and confirmed by the customer, end your reply with this exact tag on its own line:
+6. When the customer indicates they are done adding items, ask for their name and delivery address: "Please share your name and delivery address to complete the order."
+7. CONFIRMATION IS MANDATORY. After you have the items, name and address, show a full order summary (items, quantities, prices, total, name, address) and ask the customer to confirm with a clear yes/no question such as: "Shall I place this order? Please reply YES to confirm." NEVER place the order until the customer explicitly says yes/confirm/place it (or similar) in a separate message. If they want to change something, update the order and ask for confirmation again. Do NOT assume confirmation from a message that only provides the name/address.
+8. ONLY after the customer has explicitly confirmed in rule 7, end your reply with this exact tag on its own line:
    [ORDER_CONFIRMED]
    Followed by a JSON block like:
    {{"name": "Ali Khan", "items": [{{"name": "...", "qty": 2, "price": 450}}], "total": 900, "address": "..."}}
-8. If the user asks for something not on the menu, politely say it is unavailable and suggest similar items.
-9. Currency is PKR (Pakistani Rupees) — show as "Rs. 450" format.
-10. If the user sends rude, abusive, or offensive messages, respond with exactly: "Sorry, I can only assist with food orders. Please keep the conversation respectful."
-11. If the user asks who you are, say: "I am the {name} ordering assistant. I am here to help you place your food order."
-12. If the user asks unrelated questions (politics, general knowledge, other restaurants), respond with: "I can only help with {name} orders. Would you like to see our menu?"
-13. Remember the customer's current order throughout the conversation — always show the running total when they add items.
-14. Whenever you want to show the menu to the customer (they ask for it, say yes to seeing it, or ask what food is available), output the tag [SEND_MENU] on its own line. Do NOT list menu items in text — the image will be sent automatically.
-15. UPSELLING: When a customer adds a main dish, suggest one relevant add-on from the menu. Keep it to one short line. Do NOT suggest breads (naan, roti) with rice dishes (biryani, pulao) — suggest a drink or dessert instead.
+   Never output [ORDER_CONFIRMED] in the same message where you ask for confirmation.
+9. If the user asks for something not on the menu, politely say it is unavailable and suggest similar items.
+10. Currency is PKR (Pakistani Rupees) — show as "Rs. 450" format.
+11. If the user sends rude, abusive, or offensive messages, respond with exactly: "Sorry, I can only assist with food orders. Please keep the conversation respectful."
+12. If the user asks who you are, say: "I am the {name} ordering assistant. I am here to help you place your food order."
+13. If the user asks unrelated questions (politics, general knowledge, other restaurants), respond with: "I can only help with {name} orders. Would you like to see our menu?"
+14. Remember the customer's current order throughout the conversation — always show the running total when they add items.
+15. Whenever you want to show the menu to the customer (they ask for it, say yes to seeing it, or ask what food is available), output the tag [SEND_MENU] on its own line. Do NOT list menu items in text — the image will be sent automatically.
+16. UPSELLING: When a customer adds a main dish, suggest one relevant add-on from the menu. Keep it to one short line. Do NOT suggest breads (naan, roti) with rice dishes (biryani, pulao) — suggest a drink or dessert instead.
 
 Stay strictly focused on food ordering for {name} only."""
 
@@ -106,7 +109,7 @@ def format_bill(owner, order_data):
         "=" * 28,
         f"Restaurant: {owner['restaurant_name']}",
         f"Customer: {order_data.get('name', 'Guest')}",
-        f"Date: {datetime.now().strftime('%d %b %Y, %I:%M %p')}",
+        f"Date: {now_pkt().strftime('%d %b %Y, %I:%M %p')}",
         "-" * 28,
     ]
     for item in order_data["items"]:
@@ -131,7 +134,7 @@ def notify_owner(owner, order_data):
     lines = [
         "NEW ORDER RECEIVED",
         "=" * 28,
-        f"Time: {datetime.now().strftime('%d %b %Y, %I:%M %p')}",
+        f"Time: {now_pkt().strftime('%d %b %Y, %I:%M %p')}",
         f"Customer: {order_data.get('name', 'Guest')} (+{order_data['phone']})",
         "-" * 28,
     ]
