@@ -353,9 +353,10 @@
   }
 
   function formatTime(ts) {
+    // Render in the VIEWER's own locale and timezone (timestamps are stored in UTC)
     const d = new Date(ts);
-    return d.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' }) +
-           ' — ' + d.toLocaleDateString('en-PK', { day: 'numeric', month: 'short' });
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) +
+           ' — ' + d.toLocaleDateString([], { day: 'numeric', month: 'short' });
   }
 
   function updateStats(orders) {

@@ -13,6 +13,15 @@ def now_pkt():
     """Current time in Pakistan, regardless of server timezone."""
     return datetime.now(PKT)
 
+
+def now_utc():
+    """Current time as an absolute UTC instant.
+
+    Stored timestamps use this so the dashboard can render each order in
+    the viewer's own local timezone, wherever they are.
+    """
+    return datetime.now(timezone.utc)
+
 # Super admin (manages owners)
 ADMIN_USERNAME = os.getenv("DASHBOARD_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "spicegarden2024")

@@ -6,7 +6,7 @@ import psycopg2.extras
 from werkzeug.security import generate_password_hash
 
 from . import config
-from .config import now_pkt
+from .config import now_utc
 
 
 def get_db():
@@ -318,7 +318,7 @@ def save_order(owner_id, phone, name, address, total, items):
         """INSERT INTO orders (owner_id, phone, name, address, total, status, items_json, created_at)
            VALUES (%s, %s, %s, %s, %s, 'pending', %s, %s)""",
         (owner_id, phone, name, address, total, json.dumps(items),
-         now_pkt().isoformat()),
+         now_utc().isoformat()),
     )
     conn.commit()
     conn.close()
