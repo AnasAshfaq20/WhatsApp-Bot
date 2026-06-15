@@ -1,58 +1,55 @@
-from functools import wraps
-
-from flask import Blueprint, request, render_template, session, redirect, url_for
+from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi.responses import RedirectResponse
 from werkzeug.security import check_password_hash
 
 from .. import config
 from ..db import get_owner_by_username
+from ..templating import templates
 
-auth_bp = Blueprint("auth", __name__)
-
-
-def login_required(f):
-    """Any logged-in user (admin or owner)."""
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if not session.get("role"):
-            return redirect(url_for("auth.login"))
-        return f(*args, **kwargs)
-    return decorated
+router = APIRouter()
 
 
-def admin_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if session.get("role") != "admin":
-            return redirect(url_for("auth.login"))
-        return f(*args, **kwargs)
-    return decorated
+# ── Auth dependencies (redirect to /login when not authorised) ──
+def require_login(request: Request):
+    if not request.session.get("role"):
+        raise HTTPException(status_code=303, headers={"Location": "/login"})
+    return request.session
 
 
-@auth_bp.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "")
-
-        # Super admin
-        if username == config.ADMIN_USERNAME and password == config.ADMIN_PASSWORD:
-            session.clear()
-            session["role"] = "admin"
-            return redirect(url_for("admin.admin_panel"))
-
-        # Restaurant owner
-        owner = get_owner_by_username(username)
-        if owner and owner["active"] and check_password_hash(owner["password_hash"], password):
-            session.clear()
-            session["role"]     = "owner"
-            session["owner_id"] = owner["id"]
-            return redirect(url_for("dashboard.view_orders"))
-
-        return render_template("login.html", error="Invalid username or password.")
-    return render_template("login.html", error=None)
+def require_admin(request: Request):
+    if request.session.get("role") != "admin":
+        raise HTTPException(status_code=303, headers={"Location": "/login"})
+    return request.session
 
 
-@auth_bp.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("auth.login"))
+@router.get("/login")
+def login_form(request: Request):
+    return templates.TemplateResponse(request, "login.html", {"error": None})
+
+
+@router.post("/login")
+def login(request: Request, username: str = Form(""), password: str = Form("")):
+    username = username.strip()
+
+    # Super admin
+    if username == config.ADMIN_USERNAME and password == config.ADMIN_PASSWORD:
+        request.session.clear()
+        request.session["role"] = "admin"
+        return RedirectResponse(url="/admin", status_code=303)
+
+    # Restaurant owner
+    owner = get_owner_by_username(username)
+    if owner and owner["active"] and check_password_hash(owner["password_hash"], password):
+        request.session.clear()
+        request.session["role"] = "owner"
+        request.session["owner_id"] = owner["id"]
+        return RedirectResponse(url="/orders", status_code=303)
+
+    return templates.TemplateResponse(
+        request, "login.html", {"error": "Invalid username or password."})
+
+
+@router.get("/logout")
+def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/login", status_code=303)

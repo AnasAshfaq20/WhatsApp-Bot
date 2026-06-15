@@ -1,7 +1,12 @@
-"""Throwaway end-to-end test. WhatsApp sends are intercepted - nothing real goes out."""
+"""Throwaway end-to-end test (FastAPI). WhatsApp sends are intercepted - nothing real goes out."""
+import io
+import json
+
+from fastapi.testclient import TestClient
+
 from app import app
 from spicebot.services import whatsapp, bot
-from spicebot import db
+from spicebot import db, config
 
 # Intercept ALL outgoing WhatsApp calls
 sent = []
@@ -16,13 +21,14 @@ def check(name, cond, detail=""):
     print(("PASS" if cond else "FAIL"), "-", name, ("| " + str(detail) if detail and not cond else ""))
 
 
-c = app.test_client()
+# follow_redirects=False so we can inspect the 303 Location like the Flask test did
+c = TestClient(app, follow_redirects=False)
 
 # ==== 1. AUTH ====
 r = c.post("/login", data={"username": "admin", "password": "WRONG"})
-check("admin wrong password rejected", b"Invalid" in r.data)
+check("admin wrong password rejected", b"Invalid" in r.content)
 r = c.post("/login", data={"username": "admin", "password": "spicegarden2024"})
-check("admin login redirects to /admin", r.headers.get("Location") == "/admin")
+check("admin login redirects to /admin", r.headers.get("location") == "/admin")
 
 # ==== 2. CREATE SECOND TENANT ====
 r = c.post("/admin/owners", json={
@@ -30,13 +36,13 @@ r = c.post("/admin/owners", json={
     "hours": "12 PM - 12 AM", "location": "Clifton, Karachi", "delivery_info": "Rs 100 delivery fee",
     "whatsapp_phone_id": "5550001111", "whatsapp_token": "FAKE_TOKEN", "admin_phone": "923001112222",
 })
-res = r.json
+res = r.json()
 kg_id = res["owner_id"]
 kg_pw = res["credentials"]["password"]
 check("create 2nd owner", res["success"])
 
 r = c.post("/admin/owners", json={"username": "", "owner_name": "", "restaurant_name": ""})
-check("empty owner form rejected", not r.json["success"])
+check("empty owner form rejected", not r.json()["success"])
 
 # ==== 3. NEW OWNER: EMPTY MENU PROMPT BUILDS ====
 kg = db.get_owner_by_id(kg_id)
@@ -63,15 +69,18 @@ check("asks for name+address at confirm",
       "name" in reply4.lower() and "address" in reply4.lower(), reply4)
 
 before = len(db.get_orders_for_owner(1))
-reply5 = bot.chat(sg, "92399TEST", "My name is Test Bilal, address House 9 DHA Phase 5 Lahore")
+bot.chat(sg, "92399TEST", "My name is Test Bilal, address House 9 DHA Phase 5 Lahore")
+# explicit confirmation now required
+reply5 = bot.chat(sg, "92399TEST", "yes please place it")
 orders = db.get_orders_for_owner(1)
-check("order saved to DB", len(orders) == before + 1, f"{before} -> {len(orders)}")
+check("order saved to DB after explicit yes", len(orders) == before + 1, f"{before} -> {len(orders)}")
 check("[ORDER_CONFIRMED] tag not leaked", "[ORDER_CONFIRMED]" not in (reply5 or ""))
 
 new_order = orders[-1]
 check("order has correct owner scoping", new_order["owner_id"] == 1)
 check("order name captured", "Bilal" in new_order["name"], new_order["name"])
 check("order items parsed", len(new_order["items"]) >= 2, new_order["items"])
+check("timestamp stored in UTC", "+00:00" in new_order["timestamp"], new_order["timestamp"])
 
 bills = [s for s in sent if s[0] == "text" and "ORDER CONFIRMED" in s[3]]
 check("bill sent to customer", any(s[2] == "92399TEST" for s in bills))
@@ -87,27 +96,27 @@ o = db.get_owner_by_phone_id("5550001111")
 check("webhook lookup finds 2nd owner", o is not None and o["username"] == "karachigrill")
 
 # ==== 6. OWNER DASHBOARD SCOPING ====
-c2 = app.test_client()
+c2 = TestClient(app, follow_redirects=False)
 c2.post("/login", data={"username": "karachigrill", "password": kg_pw})
-data = c2.get("/orders/data").json
+data = c2.get("/orders/data").json()
 check("owner sees ONLY own (zero) orders", data["orders"] == [])
 
 r = c2.post("/orders/update", json={"id": new_order["id"], "status": "delivered"})
-check("owner blocked from updating other owner's order", not r.json["success"], r.json)
+check("owner blocked from updating other owner's order", not r.json()["success"], r.json())
 fresh = [x for x in db.get_orders_for_owner(1) if x["id"] == new_order["id"]][0]
 check("order status untouched", fresh["status"] == "pending", fresh["status"])
 
 # ==== 7. STATUS UPDATE + CUSTOMER NOTIFY (admin scope) ====
 sent.clear()
 r = c.post("/orders/update", json={"id": new_order["id"], "status": "preparing"})
-check("admin updates any order", r.json["success"])
+check("admin updates any order", r.json()["success"])
 check("customer notified of preparing", any("being prepared" in s[3] for s in sent), sent)
 
 # ==== 8. DISABLED OWNER ====
 c.put(f"/admin/owners/{kg_id}", json={"active": False})
-c3 = app.test_client()
+c3 = TestClient(app, follow_redirects=False)
 r = c3.post("/login", data={"username": "karachigrill", "password": kg_pw})
-check("disabled owner cannot log in", b"Invalid" in r.data)
+check("disabled owner cannot log in", b"Invalid" in r.content)
 check("disabled owner webhook dropped", db.get_owner_by_phone_id("5550001111") is None)
 
 # ==== 9. FULL WEBHOOK PATH (2nd owner re-enabled) ====
@@ -134,12 +143,45 @@ sent.clear()
 c.post("/webhook", json=payload2)
 check("unsupported type gets polite reply", any("text and voice" in s[3] for s in sent))
 
-# ==== 10. CLEANUP TEST DATA ====
+# ==== 10. WEBHOOK VERIFY (GET) ====
+r = c.get("/webhook", params={"hub.mode": "subscribe",
+                              "hub.verify_token": config.VERIFY_TOKEN,
+                              "hub.challenge": "12345"})
+check("webhook GET verify echoes challenge", r.text == "12345", r.text)
+
+# ==== 11. MENU IMAGE UPLOAD + PUBLIC SERVE ====
+png = bytes.fromhex("89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de"
+                    "0000000c4944415408d763f8cfc000000301010018dd8db00000000049454e44ae426082")
+r = c.post(f"/admin/owners/{kg_id}/menu-image",
+           files={"image": ("menu.png", io.BytesIO(png), "image/png")})
+check("menu image upload", r.json()["success"], r.json())
+r = TestClient(app).get(f"/menu-image/{kg_id}")
+check("menu image served publicly", r.status_code == 200 and r.content == png)
+r = c.post(f"/admin/owners/{kg_id}/menu-image",
+           files={"image": ("evil.exe", io.BytesIO(b"x"), "application/octet-stream")})
+check("bad image type rejected", not r.json()["success"])
+
+# ==== 12. VOICE ORDER ====
+db.update_owner(kg_id, {"voice_phone": "+1 555 222 3333"})
+H = {"X-Voice-Secret": config.VOICE_WEBHOOK_SECRET}
+r = c.post("/voice/order", json={"called_number": "15552223333"})  # no secret
+check("voice order without secret -> 401", r.status_code == 401)
+vbefore = len(db.get_orders_for_owner(kg_id))
+r = c.post("/voice/order", headers=H, json={
+    "called_number": "+1 555 222 3333", "customer_phone": "92366VOICE", "name": "Voice Caller",
+    "address": "5 Clifton", "items": [{"name": "Test Dish", "qty": 2, "price": 300}], "total": 600})
+check("voice order placed", r.json().get("success") is True, r.json())
+check("voice order saved", len(db.get_orders_for_owner(kg_id)) == vbefore + 1)
+r = c.post("/voice/order", headers=H, json={"called_number": "9999999999",
+                                            "items": [{"name": "x", "qty": 1, "price": 1}]})
+check("voice unknown number -> 404", r.status_code == 404)
+
+# ==== 13. CLEANUP TEST DATA ====
 c.delete(f"/admin/owners/{kg_id}")
 check("2nd owner deleted", db.get_owner_by_id(kg_id) is None)
 conn = db.get_db()
 cur = conn.cursor()
-cur.execute("DELETE FROM orders WHERE phone = '92399TEST'")
+cur.execute("DELETE FROM orders WHERE phone IN ('92399TEST','92366VOICE')")
 conn.commit()
 conn.close()
 check("test order cleaned up", all(o["phone"] != "92399TEST" for o in db.get_orders_for_owner(1)))

@@ -1,29 +1,29 @@
-from flask import Blueprint, request
+from fastapi import APIRouter, Request, Body
+from fastapi.responses import PlainTextResponse
 
 from .. import config
 from ..db import get_owner_by_phone_id
 from ..services import bot, whatsapp
 
-webhook_bp = Blueprint("webhook", __name__)
+router = APIRouter()
 
 # Deduplication — Meta sometimes retries webhooks
 processed_message_ids = set()
 
 
-@webhook_bp.route("/webhook", methods=["GET"])
-def verify_webhook():
-    mode      = request.args.get("hub.mode")
-    token     = request.args.get("hub.verify_token")
-    challenge = request.args.get("hub.challenge")
+@router.get("/webhook")
+def verify_webhook(request: Request):
+    mode      = request.query_params.get("hub.mode")
+    token     = request.query_params.get("hub.verify_token")
+    challenge = request.query_params.get("hub.challenge")
     if mode == "subscribe" and token == config.VERIFY_TOKEN:
         print("Webhook verified successfully")
-        return challenge or "", 200
-    return "Verification failed", 403
+        return PlainTextResponse(challenge or "")
+    return PlainTextResponse("Verification failed", status_code=403)
 
 
-@webhook_bp.route("/webhook", methods=["POST"])
-def receive_webhook():
-    data = request.get_json(silent=True) or {}
+@router.post("/webhook")
+def receive_webhook(data: dict = Body(default={})):
     try:
         entry   = data.get("entry", [])[0]
         changes = entry.get("changes", [])[0]
@@ -31,18 +31,18 @@ def receive_webhook():
 
         # Skip delivery/read receipts
         if value.get("statuses"):
-            return "EVENT_RECEIVED", 200
+            return PlainTextResponse("EVENT_RECEIVED")
 
         messages = value.get("messages", [])
         if not messages:
-            return "EVENT_RECEIVED", 200
+            return PlainTextResponse("EVENT_RECEIVED")
 
         # Route to the right owner by the receiving phone number ID
         phone_id = value.get("metadata", {}).get("phone_number_id", "")
         owner = get_owner_by_phone_id(phone_id)
         if not owner:
-            print(f"No active owner for phone_number_id={phone_id} — message dropped")
-            return "EVENT_RECEIVED", 200
+            print(f"No active owner for phone_number_id={phone_id} - message dropped")
+            return PlainTextResponse("EVENT_RECEIVED")
 
         msg        = messages[0]
         sender     = msg.get("from")
@@ -51,7 +51,7 @@ def receive_webhook():
 
         if message_id and message_id in processed_message_ids:
             print(f"Duplicate ignored: {message_id}")
-            return "EVENT_RECEIVED", 200
+            return PlainTextResponse("EVENT_RECEIVED")
         if message_id:
             processed_message_ids.add(message_id)
             if len(processed_message_ids) > 1000:
@@ -66,13 +66,13 @@ def receive_webhook():
                 print(f"Transcription failed: {e}")
                 whatsapp.send_text(owner, sender,
                     "Sorry, I could not understand your voice message. Please try again or type your order.")
-                return "EVENT_RECEIVED", 200
+                return PlainTextResponse("EVENT_RECEIVED")
         elif m_type == "text":
             incoming_msg = msg["text"]["body"].strip()
             print(f"[{owner['restaurant_name']}] {sender} | Msg: {incoming_msg}")
         else:
             whatsapp.send_text(owner, sender, "Sorry, I can only handle text and voice messages.")
-            return "EVENT_RECEIVED", 200
+            return PlainTextResponse("EVENT_RECEIVED")
 
         reply = bot.chat(owner, sender, incoming_msg)
         if reply:
@@ -82,4 +82,4 @@ def receive_webhook():
     except Exception as e:
         print("Error processing webhook:", e)
 
-    return "EVENT_RECEIVED", 200
+    return PlainTextResponse("EVENT_RECEIVED")

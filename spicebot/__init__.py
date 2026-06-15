@@ -1,28 +1,29 @@
 """
-WhatsApp Restaurant Bot — multi-tenant.
-Stack: Flask + Meta WhatsApp Cloud API + Groq via LangChain + PostgreSQL (Supabase)
+WhatsApp + voice restaurant ordering bot — multi-tenant.
+Stack: FastAPI + Meta WhatsApp Cloud API + Groq via LangChain + PostgreSQL (Supabase)
 """
-from flask import Flask
+from fastapi import FastAPI
+from starlette.middleware.sessions import SessionMiddleware
 
 from . import config
 from .db import init_db
 
 
 def create_app():
-    app = Flask(__name__, template_folder="../templates")
-    app.secret_key = config.SECRET_KEY
+    app = FastAPI(title="Spice Garden Ordering Bot")
+    app.add_middleware(SessionMiddleware, secret_key=config.SECRET_KEY)
 
-    from .routes.auth import auth_bp
-    from .routes.webhook import webhook_bp
-    from .routes.dashboard import dashboard_bp
-    from .routes.admin import admin_bp
-    from .routes.voice import voice_bp
+    from .routes.auth import router as auth_router
+    from .routes.webhook import router as webhook_router
+    from .routes.dashboard import router as dashboard_router
+    from .routes.admin import router as admin_router
+    from .routes.voice import router as voice_router
 
-    app.register_blueprint(auth_bp)
-    app.register_blueprint(webhook_bp)
-    app.register_blueprint(dashboard_bp)
-    app.register_blueprint(admin_bp)
-    app.register_blueprint(voice_bp)
+    app.include_router(auth_router)
+    app.include_router(webhook_router)
+    app.include_router(dashboard_router)
+    app.include_router(admin_router)
+    app.include_router(voice_router)
 
     init_db()
     return app

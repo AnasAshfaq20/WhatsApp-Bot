@@ -5,13 +5,16 @@ endpoint just persists the finished order, exactly like the WhatsApp flow.
 
 Security: the platform must send the shared secret in the X-Voice-Secret header.
 """
-from flask import Blueprint, request, jsonify
+import json
+
+from fastapi import APIRouter, Request, Body
+from fastapi.responses import JSONResponse
 
 from .. import config
 from ..db import save_order, get_owner_by_voice_phone, get_owner_by_id
 from ..services import bot, whatsapp
 
-voice_bp = Blueprint("voice", __name__)
+router = APIRouter()
 
 
 def _normalize_items(raw_items):
@@ -34,13 +37,11 @@ def _normalize_items(raw_items):
     return items
 
 
-@voice_bp.route("/voice/order", methods=["POST"])
-def voice_order():
+@router.post("/voice/order")
+def voice_order(request: Request, payload: dict = Body(default={})):
     # ── Auth ──
     if request.headers.get("X-Voice-Secret") != config.VOICE_WEBHOOK_SECRET:
-        return jsonify({"success": False, "error": "Unauthorized"}), 401
-
-    payload = request.get_json(silent=True) or {}
+        return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
 
     # Vapi wraps tool-call args under message.toolCalls[].function.arguments,
     # but also supports a flat body. Accept both.
@@ -50,7 +51,7 @@ def voice_order():
             tool_calls = payload["message"].get("toolCalls") or payload["message"].get("tool_calls") or []
             if tool_calls:
                 fn_args = tool_calls[0]["function"]["arguments"]
-                args = fn_args if isinstance(fn_args, dict) else __import__("json").loads(fn_args)
+                args = fn_args if isinstance(fn_args, dict) else json.loads(fn_args)
         except Exception as e:
             print(f"Voice payload parse note: {e}")
 
@@ -62,7 +63,8 @@ def voice_order():
         owner = get_owner_by_id(args["owner_id"])
     if not owner:
         print(f"Voice order: no owner for called_number={called_number!r}")
-        return jsonify({"success": False, "error": "Restaurant not found for this number"}), 404
+        return JSONResponse({"success": False, "error": "Restaurant not found for this number"},
+                            status_code=404)
 
     # ── Build the order ──
     customer_phone = (args.get("customer_phone") or args.get("from") or "").strip()
@@ -71,7 +73,7 @@ def voice_order():
     items   = _normalize_items(args.get("items"))
 
     if not items:
-        return jsonify({"success": False, "error": "No items in the order"}), 400
+        return JSONResponse({"success": False, "error": "No items in the order"}, status_code=400)
 
     total = args.get("total")
     try:
@@ -103,4 +105,4 @@ def voice_order():
     spoken = (f"Your order is confirmed. {len(items)} items, total {total} rupees. "
               f"Estimated delivery 30 to 45 minutes. Thank you for ordering from "
               f"{owner['restaurant_name']}.")
-    return jsonify({"success": True, "total": total, "message": spoken})
+    return {"success": True, "total": total, "message": spoken}

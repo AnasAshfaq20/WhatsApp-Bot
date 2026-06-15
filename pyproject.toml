@@ -1,15 +1,19 @@
 [project]
 name = "umer-whatsapp-project"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
+description = "WhatsApp + voice restaurant ordering bot (FastAPI)"
 requires-python = ">=3.12"
 dependencies = [
-    "flask>=3.0.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "jinja2>=3.1.4",
+    "python-multipart>=0.0.9",
+    "itsdangerous>=2.2.0",
+    "werkzeug>=3.0.0",
     "python-dotenv>=1.0.1",
     "langchain-groq>=0.2.0",
+    "groq>=0.11.0",
     "requests>=2.31.0",
-    "gunicorn>=22.0.0",
     "psycopg2-binary>=2.9.12",
 ]
  
