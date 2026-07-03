@@ -37,13 +37,13 @@ def login(request: Request, username: str = Form(""), password: str = Form("")):
         request.session["role"] = "admin"
         return RedirectResponse(url="/admin", status_code=303)
 
-    # Restaurant owner
+    # Business owner
     owner = get_owner_by_username(username)
     if owner and owner["active"] and check_password_hash(owner["password_hash"], password):
         request.session.clear()
         request.session["role"] = "owner"
         request.session["owner_id"] = owner["id"]
-        return RedirectResponse(url="/orders", status_code=303)
+        return RedirectResponse(url="/bookings", status_code=303)
 
     return templates.TemplateResponse(
         request, "login.html", {"error": "Invalid username or password."})

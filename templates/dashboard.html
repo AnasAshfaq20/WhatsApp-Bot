@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>{{ restaurant_name }} — Orders Dashboard</title>
+  <title>{{ business_name }} — Bookings Dispatch</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -11,20 +11,20 @@
     [data-theme="light"] {
       --bg:          #f5f5f5;
       --card-bg:     #ffffff;
-      --header-bg:   #1a1a2e;
+      --header-bg:   #10101c;
       --text:        #333333;
       --text-muted:  #888888;
       --text-sub:    #555555;
       --border:      #f0f0f0;
       --border-dash: #f0f0f0;
-      --addr-bg:     #fafafa;
+      --route-bg:    #fafafa;
       --filter-bg:   #ffffff;
       --filter-border: #dddddd;
       --shadow:      rgba(0,0,0,0.07);
       --shadow-card: rgba(0,0,0,0.08);
       --total-border:#f0f0f0;
       --toggle-bg:   #e2e8f0;
-      --toggle-icon: "🌙";
+      --gold:        #b8860b;
     }
     [data-theme="dark"] {
       --bg:          #0f0f1a;
@@ -35,14 +35,14 @@
       --text-sub:    #94a3b8;
       --border:      #2d2d42;
       --border-dash: #2d2d42;
-      --addr-bg:     #16162a;
+      --route-bg:    #16162a;
       --filter-bg:   #1e1e2e;
       --filter-border:#2d2d42;
       --shadow:      rgba(0,0,0,0.3);
       --shadow-card: rgba(0,0,0,0.4);
       --total-border:#2d2d42;
       --toggle-bg:   #2d2d42;
-      --toggle-icon: "☀️";
+      --gold:        #d4af37;
     }
 
     body {
@@ -61,12 +61,13 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
+      flex-wrap: wrap;
     }
     header h1 { font-size: 1.4rem; letter-spacing: 1px; }
-    .header-right { display: flex; align-items: center; gap: 16px; }
+    header h1 .accent { color: var(--gold); }
+    .header-right { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
     .header-right span { font-size: 0.85rem; opacity: 0.7; }
 
-    /* ── Dark mode toggle ── */
     .theme-toggle {
       background: var(--toggle-bg);
       border: none;
@@ -109,18 +110,19 @@
       border-radius: 10px;
       padding: 16px 24px;
       flex: 1;
-      min-width: 140px;
+      min-width: 130px;
       text-align: center;
       box-shadow: 0 2px 8px var(--shadow);
       transition: background 0.3s, box-shadow 0.3s;
     }
     .stat-card .num { font-size: 2rem; font-weight: 700; }
     .stat-card .lbl { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; }
-    .stat-card.total .num    { color: #6366f1; }
-    .stat-card.pending .num  { color: #f39c12; }
-    .stat-card.preparing .num{ color: #2980b9; }
-    .stat-card.delivered .num{ color: #27ae60; }
-    .stat-card.revenue .num  { color: #8e44ad; }
+    .stat-card.total .num     { color: #6366f1; }
+    .stat-card.pending .num   { color: #f39c12; }
+    .stat-card.confirmed .num { color: #2980b9; }
+    .stat-card.en_route .num  { color: #8b5cf6; }
+    .stat-card.completed .num { color: #27ae60; }
+    .stat-card.revenue .num   { color: var(--gold); }
 
     /* ── Filters ── */
     .filters {
@@ -145,23 +147,23 @@
       color: white;
     }
 
-    /* ── Orders grid ── */
-    .orders-grid {
+    /* ── Bookings grid ── */
+    .bookings-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
       gap: 16px;
       padding: 0 30px 30px;
     }
 
-    /* ── Order card ── */
-    .order-card {
+    /* ── Booking card ── */
+    .booking-card {
       background: var(--card-bg);
       border-radius: 12px;
       box-shadow: 0 2px 10px var(--shadow-card);
       overflow: hidden;
       transition: transform 0.2s, background 0.3s, box-shadow 0.3s;
     }
-    .order-card:hover { transform: translateY(-2px); }
+    .booking-card:hover { transform: translateY(-2px); }
 
     .card-header {
       padding: 14px 18px;
@@ -170,8 +172,8 @@
       align-items: center;
       border-bottom: 1px solid var(--border);
     }
-    .order-id   { font-weight: 700; font-size: 0.95rem; color: var(--text); }
-    .order-time { font-size: 0.75rem; color: var(--text-muted); }
+    .booking-ref  { font-weight: 700; font-size: 0.95rem; color: var(--text); }
+    .booking-time { font-size: 0.75rem; color: var(--text-muted); }
 
     .status-badge {
       padding: 4px 12px;
@@ -180,14 +182,19 @@
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.5px;
+      white-space: nowrap;
     }
     .status-pending   { background: #fff3cd; color: #856404; }
-    .status-preparing { background: #cfe2ff; color: #084298; }
-    .status-delivered { background: #d1e7dd; color: #0a3622; }
+    .status-confirmed { background: #cfe2ff; color: #084298; }
+    .status-en_route  { background: #ede9fe; color: #5b21b6; }
+    .status-completed { background: #d1e7dd; color: #0a3622; }
+    .status-cancelled { background: #f8d7da; color: #842029; }
 
     [data-theme="dark"] .status-pending   { background: #3d2e00; color: #fbbf24; }
-    [data-theme="dark"] .status-preparing { background: #0c2340; color: #60a5fa; }
-    [data-theme="dark"] .status-delivered { background: #052e16; color: #4ade80; }
+    [data-theme="dark"] .status-confirmed { background: #0c2340; color: #60a5fa; }
+    [data-theme="dark"] .status-en_route  { background: #2e1065; color: #c4b5fd; }
+    [data-theme="dark"] .status-completed { background: #052e16; color: #4ade80; }
+    [data-theme="dark"] .status-cancelled { background: #450a0a; color: #f87171; }
 
     .card-body { padding: 14px 18px; }
 
@@ -198,18 +205,64 @@
       display: flex;
       align-items: center;
       gap: 6px;
+      flex-wrap: wrap;
     }
 
-    .items-list { margin-bottom: 12px; }
-    .item-row {
+    .vehicle-row {
       display: flex;
       justify-content: space-between;
-      font-size: 0.85rem;
-      padding: 3px 0;
-      border-bottom: 1px dashed var(--border-dash);
-      color: var(--text);
+      align-items: center;
+      gap: 8px;
+      font-size: 0.92rem;
+      font-weight: 600;
+      margin-bottom: 8px;
     }
-    .item-row:last-child { border-bottom: none; }
+    .type-chip {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 3px 9px;
+      border-radius: 20px;
+      background: var(--toggle-bg);
+      color: var(--text-sub);
+      white-space: nowrap;
+    }
+
+    .pickup-row {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--gold);
+      margin-bottom: 8px;
+    }
+
+    .route-box {
+      font-size: 0.8rem;
+      color: var(--text-sub);
+      background: var(--route-bg);
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-bottom: 10px;
+      line-height: 1.5;
+      transition: background 0.3s;
+    }
+
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      padding: 2px 0;
+    }
+
+    .driver-row {
+      font-size: 0.8rem;
+      margin-top: 8px;
+      padding: 7px 10px;
+      border: 1px dashed var(--border-dash);
+      border-radius: 6px;
+      color: var(--text-sub);
+    }
 
     .total-row {
       display: flex;
@@ -220,16 +273,6 @@
       padding-top: 8px;
       border-top: 2px solid var(--total-border);
       color: var(--text);
-    }
-
-    .address-row {
-      font-size: 0.78rem;
-      color: var(--text-muted);
-      margin-top: 10px;
-      padding: 8px;
-      background: var(--addr-bg);
-      border-radius: 6px;
-      transition: background 0.3s;
     }
 
     /* ── Status buttons ── */
@@ -250,9 +293,10 @@
       transition: opacity 0.2s;
     }
     .btn-status:hover { opacity: 0.85; }
-    .btn-preparing { background: #2980b9; color: white; }
-    .btn-delivered { background: #27ae60; color: white; }
-    .btn-status:disabled { opacity: 0.35; cursor: default; }
+    .btn-confirm  { background: #2980b9; color: white; }
+    .btn-enroute  { background: #8b5cf6; color: white; }
+    .btn-complete { background: #27ae60; color: white; }
+    .btn-cancel   { background: transparent; color: #ef4444; border: 1px solid #ef4444; flex: 0 0 auto; padding: 8px 14px; }
 
     /* ── Empty state ── */
     .empty {
@@ -263,18 +307,61 @@
     }
     .empty h2 { font-size: 1.2rem; margin-bottom: 8px; }
 
-    /* ── New order flash ── */
+    /* ── New booking flash ── */
     @keyframes flashIn {
       from { opacity: 0; transform: scale(0.95); }
       to   { opacity: 1; transform: scale(1); }
     }
-    .new-order { animation: flashIn 0.4s ease; border: 2px solid #f39c12; }
+    .new-booking { animation: flashIn 0.4s ease; border: 2px solid #f39c12; }
+
+    /* ── Confirm / driver modal ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 50;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--card-bg);
+      border-radius: 14px;
+      padding: 24px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    }
+    .modal h3 { margin-bottom: 6px; font-size: 1.05rem; }
+    .modal p  { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 16px; }
+    .modal label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin: 10px 0 4px;
+    }
+    .modal input {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--route-bg);
+      color: var(--text);
+      font-size: 0.86rem;
+    }
+    .modal input:focus { outline: 2px solid #6366f1; border-color: transparent; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+    .modal-actions .btn-status { flex: 0 0 auto; padding: 9px 18px; }
+    .btn-plain { background: var(--toggle-bg); color: var(--text); }
   </style>
 </head>
 <body>
 
 <header>
-  <h1>{{ restaurant_name }} — Live Orders</h1>
+  <h1>{{ business_name }} <span class="accent">— Dispatch</span></h1>
   <div class="header-right">
     <span><span id="live-dot"></span>Auto-refreshing every 5 seconds</span>
     {% if is_admin %}
@@ -289,41 +376,70 @@
 <div class="stats">
   <div class="stat-card total">
     <div class="num" id="stat-total">0</div>
-    <div class="lbl">Total Orders</div>
+    <div class="lbl">Total Bookings</div>
   </div>
   <div class="stat-card pending">
     <div class="num" id="stat-pending">0</div>
     <div class="lbl">Pending</div>
   </div>
-  <div class="stat-card preparing">
-    <div class="num" id="stat-preparing">0</div>
-    <div class="lbl">Preparing</div>
+  <div class="stat-card confirmed">
+    <div class="num" id="stat-confirmed">0</div>
+    <div class="lbl">Confirmed</div>
   </div>
-  <div class="stat-card delivered">
-    <div class="num" id="stat-delivered">0</div>
-    <div class="lbl">Delivered</div>
+  <div class="stat-card en_route">
+    <div class="num" id="stat-en_route">0</div>
+    <div class="lbl">En Route</div>
+  </div>
+  <div class="stat-card completed">
+    <div class="num" id="stat-completed">0</div>
+    <div class="lbl">Completed</div>
   </div>
   <div class="stat-card revenue">
-    <div class="num" id="stat-revenue">Rs. 0</div>
-    <div class="lbl">Total Revenue</div>
+    <div class="num" id="stat-revenue">0</div>
+    <div class="lbl">Revenue</div>
   </div>
 </div>
 
 <!-- Filters -->
 <div class="filters">
-  <button class="filter-btn active" onclick="setFilter('all', this)">All Orders</button>
+  <button class="filter-btn active" onclick="setFilter('all', this)">All Bookings</button>
   <button class="filter-btn" onclick="setFilter('pending', this)">Pending</button>
-  <button class="filter-btn" onclick="setFilter('preparing', this)">Preparing</button>
-  <button class="filter-btn" onclick="setFilter('delivered', this)">Delivered</button>
+  <button class="filter-btn" onclick="setFilter('confirmed', this)">Confirmed</button>
+  <button class="filter-btn" onclick="setFilter('en_route', this)">En Route</button>
+  <button class="filter-btn" onclick="setFilter('completed', this)">Completed</button>
+  <button class="filter-btn" onclick="setFilter('cancelled', this)">Cancelled</button>
 </div>
 
-<!-- Orders -->
-<div class="orders-grid" id="orders-grid"></div>
+<!-- Bookings -->
+<div class="bookings-grid" id="bookings-grid"></div>
+
+<!-- Confirm booking + assign chauffeur modal -->
+<div class="modal-overlay" id="confirm-modal">
+  <div class="modal">
+    <h3>Confirm booking <span id="cm-ref"></span></h3>
+    <p>Optionally assign a chauffeur — the customer receives the confirmation (and driver details) on WhatsApp.</p>
+    <label>Chauffeur name (optional)</label>
+    <input id="cm-driver-name" placeholder="e.g. Michael Brown">
+    <label>Chauffeur phone (optional)</label>
+    <input id="cm-driver-phone" placeholder="e.g. 15550001111">
+    <div class="modal-actions">
+      <button class="btn-status btn-plain" onclick="closeConfirmModal()">Back</button>
+      <button class="btn-status btn-confirm" onclick="submitConfirm()">Confirm Booking</button>
+    </div>
+  </div>
+</div>
 
 <script>
   let currentFilter = 'all';
   let knownIds = new Set();
+  let confirmingId = null;
   const ownerQuery = "{{ ('?owner_id=' ~ owner_id) if is_admin else '' }}";
+  const CUR = "{{ currency }}";
+
+  const STATUS_LABELS = {
+    pending: 'Pending', confirmed: 'Confirmed', en_route: 'En Route',
+    completed: 'Completed', cancelled: 'Cancelled'
+  };
 
   // ── Theme toggle ──
   const savedTheme = localStorage.getItem('theme') || 'light';
@@ -349,7 +465,7 @@
     currentFilter = f;
     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    renderOrders(window._lastOrders || []);
+    renderBookings(window._lastBookings || []);
   }
 
   function formatTime(ts) {
@@ -359,106 +475,162 @@
            ' — ' + d.toLocaleDateString([], { day: 'numeric', month: 'short' });
   }
 
-  function updateStats(orders) {
-    const pending   = orders.filter(o => !o.status || o.status === 'pending').length;
-    const preparing = orders.filter(o => o.status === 'preparing').length;
-    const delivered = orders.filter(o => o.status === 'delivered').length;
-    const revenue   = orders.reduce((s, o) => s + (o.total || 0), 0);
+  function updateStats(bookings) {
+    const count = s => bookings.filter(b => (b.status || 'pending') === s).length;
+    // Revenue counts everything except cancelled trips
+    const revenue = bookings
+      .filter(b => b.status !== 'cancelled')
+      .reduce((s, b) => s + (b.total || 0), 0);
 
-    document.getElementById('stat-total').textContent     = orders.length;
-    document.getElementById('stat-pending').textContent   = pending;
-    document.getElementById('stat-preparing').textContent = preparing;
-    document.getElementById('stat-delivered').textContent = delivered;
-    document.getElementById('stat-revenue').textContent   = 'Rs. ' + revenue.toLocaleString();
+    document.getElementById('stat-total').textContent     = bookings.length;
+    document.getElementById('stat-pending').textContent   = count('pending');
+    document.getElementById('stat-confirmed').textContent = count('confirmed');
+    document.getElementById('stat-en_route').textContent  = count('en_route');
+    document.getElementById('stat-completed').textContent = count('completed');
+    document.getElementById('stat-revenue').textContent   = CUR + revenue.toLocaleString();
   }
 
-  function renderOrders(orders) {
-    window._lastOrders = orders;
-    const grid = document.getElementById('orders-grid');
+  function actionButtons(b) {
+    const status = b.status || 'pending';
+    if (status === 'pending') {
+      return `
+        <button class="btn-status btn-confirm" onclick="openConfirmModal(${b.id}, '${b.ref}')">Confirm & Assign</button>
+        <button class="btn-status btn-cancel" onclick="cancelBooking(${b.id}, '${b.ref}')">Cancel</button>`;
+    }
+    if (status === 'confirmed') {
+      return `
+        <button class="btn-status btn-enroute" onclick="updateStatus(${b.id}, 'en_route')">Chauffeur En Route</button>
+        <button class="btn-status btn-cancel" onclick="cancelBooking(${b.id}, '${b.ref}')">Cancel</button>`;
+    }
+    if (status === 'en_route') {
+      return `<button class="btn-status btn-complete" onclick="updateStatus(${b.id}, 'completed')">Complete Trip</button>`;
+    }
+    return '';
+  }
+
+  function renderBookings(bookings) {
+    window._lastBookings = bookings;
+    const grid = document.getElementById('bookings-grid');
 
     const filtered = currentFilter === 'all'
-      ? orders
-      : orders.filter(o => (o.status || 'pending') === currentFilter);
+      ? bookings
+      : bookings.filter(b => (b.status || 'pending') === currentFilter);
 
     const sorted = [...filtered].reverse();
 
     if (sorted.length === 0) {
-      grid.innerHTML = `<div class="empty"><h2>No orders yet</h2><p>Waiting for customers...</p></div>`;
+      grid.innerHTML = `<div class="empty"><h2>No bookings yet</h2><p>Waiting for customers...</p></div>`;
       return;
     }
 
-    grid.innerHTML = sorted.map((order) => {
-      const isNew   = !knownIds.has(order.timestamp);
-      const status  = order.status || 'pending';
-      const orderId = '#' + String(order.id).padStart(3, '0');
+    grid.innerHTML = sorted.map((b) => {
+      const isNew   = !knownIds.has(b.timestamp);
+      const status  = b.status || 'pending';
+      const isTransfer = b.booking_type === 'transfer';
 
-      const itemsHtml = (order.items || []).map(item =>
-        `<div class="item-row">
-          <span>${item.name} x${item.qty}</span>
-          <span>Rs. ${item.qty * item.price}</span>
-        </div>`
-      ).join('');
+      const routeHtml = `
+        <div class="route-box">
+          From: ${b.pickup_location}
+          ${b.dropoff_location ? `<br>To: ${b.dropoff_location}` : ''}
+          ${!isTransfer && b.hours ? `<br>Duration: ${b.hours} hour${b.hours > 1 ? 's' : ''}` : ''}
+        </div>`;
+
+      const driverHtml = b.driver_name
+        ? `<div class="driver-row">Chauffeur: <b>${b.driver_name}</b>${b.driver_phone ? ' — +' + String(b.driver_phone).replace(/^\+/, '') : ''}</div>`
+        : '';
+
+      const actions = actionButtons(b);
 
       return `
-        <div class="order-card ${isNew ? 'new-order' : ''}" id="card-${order.timestamp}">
+        <div class="booking-card ${isNew ? 'new-booking' : ''}" id="card-${b.timestamp}">
           <div class="card-header">
             <div>
-              <div class="order-id">${orderId}</div>
-              <div class="order-time">${formatTime(order.timestamp)}</div>
+              <div class="booking-ref">${b.ref}</div>
+              <div class="booking-time">Booked ${formatTime(b.timestamp)}</div>
             </div>
-            <span class="status-badge status-${status}">${status}</span>
+            <span class="status-badge status-${status}">${STATUS_LABELS[status] || status}</span>
           </div>
           <div class="card-body">
             <div class="phone-row">
-              👤 ${order.name || 'Guest'} &nbsp;|&nbsp; 📱 +${order.phone}
+              👤 ${b.name || 'Guest'} &nbsp;|&nbsp; 📱 +${b.phone}
             </div>
-            <div class="items-list">${itemsHtml}</div>
+            <div class="vehicle-row">
+              <span>🚘 ${b.vehicle}</span>
+              <span class="type-chip">${isTransfer ? 'Transfer' : 'Hourly'}</span>
+            </div>
+            <div class="pickup-row">🕑 Pickup: ${b.pickup_time}</div>
+            ${routeHtml}
+            <div class="meta-row"><span>Passengers</span><span>${b.passengers || 1}</span></div>
+            ${b.occasion ? `<div class="meta-row"><span>Occasion</span><span>${b.occasion}</span></div>` : ''}
+            ${driverHtml}
             <div class="total-row">
               <span>Total</span>
-              <span>Rs. ${order.total}</span>
+              <span>${CUR}${(b.total || 0).toLocaleString()}</span>
             </div>
-            <div class="address-row">📍 ${order.address}</div>
           </div>
-          <div class="status-actions">
-            <button class="btn-status btn-preparing"
-              onclick="updateStatus(${order.id}, 'preparing')"
-              ${status !== 'pending' ? 'disabled' : ''}>
-              Mark Preparing
-            </button>
-            <button class="btn-status btn-delivered"
-              onclick="updateStatus(${order.id}, 'delivered')"
-              ${status === 'delivered' ? 'disabled' : ''}>
-              Mark Delivered
-            </button>
-          </div>
+          ${actions ? `<div class="status-actions">${actions}</div>` : ''}
         </div>`;
     }).join('');
 
-    orders.forEach(o => knownIds.add(o.timestamp));
+    bookings.forEach(b => knownIds.add(b.timestamp));
+  }
+
+  // ── Confirm modal ──
+  function openConfirmModal(id, ref) {
+    confirmingId = id;
+    document.getElementById('cm-ref').textContent = ref;
+    document.getElementById('cm-driver-name').value = '';
+    document.getElementById('cm-driver-phone').value = '';
+    document.getElementById('confirm-modal').classList.add('open');
+  }
+
+  function closeConfirmModal() {
+    confirmingId = null;
+    document.getElementById('confirm-modal').classList.remove('open');
+  }
+
+  async function submitConfirm() {
+    const driverName  = document.getElementById('cm-driver-name').value.trim();
+    const driverPhone = document.getElementById('cm-driver-phone').value.trim();
+    const body = { id: confirmingId, status: 'confirmed' };
+    if (driverName)  body.driver_name  = driverName;
+    if (driverPhone) body.driver_phone = driverPhone;
+    closeConfirmModal();
+    await fetch('/bookings/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    fetchBookings();
+  }
+
+  async function cancelBooking(id, ref) {
+    if (!confirm(`Cancel booking ${ref}? The customer will be notified on WhatsApp.`)) return;
+    await updateStatus(id, 'cancelled');
   }
 
   async function updateStatus(id, newStatus) {
-    await fetch('/orders/update', {
+    await fetch('/bookings/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, status: newStatus })
     });
-    fetchOrders();
+    fetchBookings();
   }
 
-  async function fetchOrders() {
+  async function fetchBookings() {
     try {
-      const r = await fetch('/orders/data' + ownerQuery);
+      const r = await fetch('/bookings/data' + ownerQuery);
       const data = await r.json();
-      updateStats(data.orders);
-      renderOrders(data.orders);
+      updateStats(data.bookings);
+      renderBookings(data.bookings);
     } catch(e) {
       console.error('Fetch error:', e);
     }
   }
 
-  fetchOrders();
-  setInterval(fetchOrders, 5000);
+  fetchBookings();
+  setInterval(fetchBookings, 5000);
 </script>
 </body>
 </html>

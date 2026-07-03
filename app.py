@@ -1,6 +1,6 @@
 import os
 
-from spicebot import create_app
+from limobot import create_app
 
 app = create_app()
 

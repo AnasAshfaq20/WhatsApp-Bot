@@ -1,5 +1,5 @@
 """
-WhatsApp + voice restaurant ordering bot — multi-tenant.
+WhatsApp + voice limo & car rental booking bot — multi-tenant.
 Stack: FastAPI + Meta WhatsApp Cloud API + Groq via LangChain + PostgreSQL (Supabase)
 """
 from fastapi import FastAPI
@@ -10,7 +10,7 @@ from .db import init_db
 
 
 def create_app():
-    app = FastAPI(title="Spice Garden Ordering Bot")
+    app = FastAPI(title="LuxRide Booking Bot")
     app.add_middleware(SessionMiddleware, secret_key=config.SECRET_KEY)
 
     from .routes.auth import router as auth_router

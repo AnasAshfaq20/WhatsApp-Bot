@@ -1,0 +1,222 @@
+"""Conversation engine: system prompt, LLM, booking extraction, notifications."""
+import json
+from datetime import datetime
+
+from langchain_groq import ChatGroq
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+
+from ..db import get_fleet_dict, save_booking, booking_ref
+from ..config import now_pkt
+from . import whatsapp
+
+llm = ChatGroq(model="openai/gpt-oss-120b")
+
+# In-memory conversation state, keyed by (owner_id, customer_phone)
+conversations = {}
+
+
+def build_system_prompt(owner):
+    fleet      = get_fleet_dict(owner)
+    fleet_text = json.dumps(fleet, indent=2)
+    name       = fleet["business_name"]
+    cur        = fleet["currency"]
+    today      = now_pkt().strftime("%A, %d %B %Y")
+    return f"""You are the professional WhatsApp booking assistant for "{name}", a chauffeured limousine and luxury car rental service.
+
+TODAY'S DATE: {today}. Use it to resolve dates like "tomorrow" or "this Saturday" into an exact date.
+
+YOUR JOB:
+- Greet customers warmly and professionally
+- Help them choose the right vehicle for their trip and group size
+- Collect all booking details step by step
+- Quote exact prices from the fleet list
+- Confirm bookings only after explicit customer approval
+- Answer questions about availability hours, service area and pricing
+
+COMPANY INFO:
+- Name: {name}
+- Availability: {fleet['hours']}
+- Base location: {fleet['location']}
+- Service area: {fleet['service_area']}
+
+FLEET (use these exact rates — never invent prices or vehicles):
+{fleet_text}
+
+PRICING RULES:
+- Two booking types: "hourly" (chauffeur by the hour) and "transfer" (flat-rate one-way trip, e.g. airport pickup/drop-off).
+- Hourly: total = hourly_rate x hours. Each vehicle has min_hours — never quote fewer hours than that; tell the customer the minimum if they ask for less.
+- Transfer: use the vehicle's airport_rate as the flat price. If airport_rate is null, that vehicle is not offered for transfers — suggest one that is.
+- Always show the price breakdown before asking for confirmation, e.g. "{cur}110 x 4 hours = {cur}440".
+
+BOOKING DETAILS TO COLLECT (one or two questions at a time, never a long form):
+1. Occasion / trip type (airport transfer, wedding, corporate, night out, point to point...)
+2. Pickup date and time
+3. Pickup location
+4. Drop-off location (for transfers) OR number of hours (for hourly bookings)
+5. Number of passengers — then recommend the best-fitting vehicles with prices. Never book a vehicle with capacity below the passenger count.
+6. Customer's full name — ask only at the end, right before confirmation.
+
+CONVERSATION RULES:
+1. Keep replies SHORT — this is WhatsApp, not email. Use line breaks, not paragraphs.
+2. Do not use any emojis in your replies.
+3. Do NOT use any markdown formatting — no asterisks (*), no underscores (_), no hyphens for bullets, no bold, no italic. Plain text only.
+4. Recommend vehicles that fit the passenger count and occasion; mention capacity and rate for each option (2-3 options max).
+5. CONFIRMATION IS MANDATORY. Once you have all details, show a full booking summary (vehicle, date and time, pickup, drop-off or hours, passengers, price breakdown, total, customer name) and ask: "Shall I confirm this booking? Please reply YES to confirm." NEVER confirm until the customer explicitly says yes/confirm/book it (or similar) in a separate message. If they change something, update and ask again. Do NOT treat the message that provides their name as confirmation.
+6. ONLY after the customer has explicitly confirmed in rule 5, end your reply with this exact tag on its own line:
+   [BOOKING_CONFIRMED]
+   Followed by a JSON block like:
+   {{"name": "John Smith", "vehicle": "Cadillac Escalade", "booking_type": "hourly", "pickup_location": "...", "dropoff_location": "...", "pickup_time": "Saturday 15 Mar 2026, 7:00 PM", "hours": 4, "passengers": 6, "occasion": "night out", "total": 440}}
+   For transfers set "hours" to 0 and always fill "dropoff_location". Never output [BOOKING_CONFIRMED] in the same message where you ask for confirmation.
+7. If the customer asks for a vehicle you do not have, say it is unavailable and suggest the closest match from the fleet.
+8. Currency: show prices as "{cur}440" format.
+9. If the user sends rude, abusive, or offensive messages, respond with exactly: "Sorry, I can only assist with vehicle bookings. Please keep the conversation respectful."
+10. If the user asks who you are, say: "I am the {name} booking assistant. I can help you reserve a chauffeured vehicle."
+11. If the user asks unrelated questions (politics, general knowledge, other companies), respond with: "I can only help with {name} bookings. Would you like to see our fleet?"
+12. Remember the booking details already collected — never ask for the same thing twice; show a running summary when details change.
+13. Whenever you want to show the fleet to the customer (they ask for it, say yes to seeing it, or ask what cars are available), output the tag [SEND_FLEET] on its own line. Do NOT list the whole fleet in text — the fleet card image will be sent automatically.
+14. UPSELLING: mention at most one relevant upgrade when it genuinely fits, e.g. suggest the stretch limousine for weddings or proms, or the Sprinter for groups near an SUV's capacity limit. One short line only.
+15. Cancellation or changes to an existing booking: tell them a team member will contact them shortly, and continue helping with anything else.
+
+Stay strictly focused on chauffeur and vehicle bookings for {name} only."""
+
+
+def get_history(owner, customer_phone):
+    key = (owner["id"], customer_phone)
+    if key not in conversations:
+        conversations[key] = {
+            "messages":   [SystemMessage(content=build_system_prompt(owner))],
+            "started_at": datetime.now().isoformat(),
+        }
+    return conversations[key]["messages"]
+
+
+def clear_conversations():
+    conversations.clear()
+
+
+def chat(owner, customer_phone, incoming_msg):
+    """Run one turn of the conversation. Returns the reply text (may be empty)."""
+    history = get_history(owner, customer_phone)
+    history.append(HumanMessage(content=incoming_msg))
+
+    response = llm.invoke(history)
+    reply    = response.content
+    history.append(AIMessage(content=reply))
+
+    # Fleet card request
+    if "[SEND_FLEET]" in reply:
+        if owner.get("fleet_image_url"):
+            whatsapp.send_image(owner, customer_phone, owner["fleet_image_url"],
+                                "Here is our fleet. Which vehicle would you like to book?")
+            reply = reply.replace("[SEND_FLEET]", "").strip()
+        else:
+            # No image configured — let the LLM list the fleet in text instead
+            history.append(HumanMessage(
+                content="(No fleet image is available. List the fleet in plain text: "
+                        "vehicle, capacity and hourly rate per category. "
+                        "Do not output the [SEND_FLEET] tag.)"))
+            reply = llm.invoke(history).content.replace("[SEND_FLEET]", "").strip()
+            history.append(AIMessage(content=reply))
+
+    reply = _extract_and_log_booking(owner, reply, customer_phone)
+    return reply
+
+
+def format_confirmation(owner, booking, ref):
+    cur = owner.get("currency") or "$"
+    is_transfer = booking.get("booking_type") == "transfer"
+    lines = [
+        "BOOKING CONFIRMED",
+        "=" * 28,
+        f"Reference: {ref}",
+        f"Company: {owner['business_name']}",
+        f"Customer: {booking.get('name', 'Guest')}",
+        "-" * 28,
+        f"Vehicle: {booking.get('vehicle', '')}",
+        f"Service: {'Flat-rate transfer' if is_transfer else 'Hourly charter'}",
+        f"Pickup: {booking.get('pickup_time', '')}",
+        f"From: {booking.get('pickup_location', '')}",
+    ]
+    if booking.get("dropoff_location"):
+        lines.append(f"To: {booking['dropoff_location']}")
+    if not is_transfer and booking.get("hours"):
+        lines.append(f"Duration: {booking['hours']} hours")
+    lines += [
+        f"Passengers: {booking.get('passengers', 1)}",
+        "-" * 28,
+        f"TOTAL: {cur}{booking['total']}",
+        "=" * 28,
+        "Your chauffeur's details will be shared before pickup.",
+        f"Thank you for choosing {owner['business_name']}!",
+    ]
+    return "\n".join(lines)
+
+
+def notify_owner(owner, booking, ref):
+    if not owner.get("admin_phone"):
+        return
+    cur = owner.get("currency") or "$"
+    lines = [
+        "NEW BOOKING RECEIVED",
+        "=" * 28,
+        f"Reference: {ref}",
+        f"Received: {now_pkt().strftime('%d %b %Y, %I:%M %p')}",
+        f"Customer: {booking.get('name', 'Guest')} (+{booking['phone']})",
+        "-" * 28,
+        f"Vehicle: {booking.get('vehicle', '')}",
+        f"Type: {booking.get('booking_type', 'hourly')}",
+        f"Occasion: {booking.get('occasion', '') or 'N/A'}",
+        f"Pickup: {booking.get('pickup_time', '')}",
+        f"From: {booking.get('pickup_location', '')}",
+        f"To: {booking.get('dropoff_location', '') or 'N/A'}",
+        f"Hours: {booking.get('hours') or 'N/A'}",
+        f"Passengers: {booking.get('passengers', 1)}",
+        "-" * 28,
+        f"TOTAL: {cur}{booking['total']}",
+        "=" * 28,
+        "Open the dashboard to confirm and assign a chauffeur.",
+    ]
+    whatsapp.send_text(owner, owner["admin_phone"], "\n".join(lines))
+    print(f"Owner notified at {owner['admin_phone']}")
+
+
+def _extract_and_log_booking(owner, reply_text, customer_phone):
+    if "[BOOKING_CONFIRMED]" not in reply_text:
+        return reply_text
+    try:
+        parts       = reply_text.split("[BOOKING_CONFIRMED]")
+        clean_reply = parts[0].strip()
+        json_part   = parts[1].strip().replace("```json", "").replace("```", "").strip()
+
+        booking = json.loads(json_part)
+        booking["phone"] = customer_phone
+
+        booking_id = save_booking(
+            owner_id         = owner["id"],
+            phone            = customer_phone,
+            name             = booking.get("name", "Guest"),
+            vehicle          = booking.get("vehicle", ""),
+            booking_type     = booking.get("booking_type", "hourly"),
+            pickup_location  = booking.get("pickup_location", ""),
+            dropoff_location = booking.get("dropoff_location", ""),
+            pickup_time      = booking.get("pickup_time", ""),
+            hours            = int(booking.get("hours") or 0),
+            passengers       = int(booking.get("passengers") or 1),
+            occasion         = booking.get("occasion", ""),
+            total            = int(booking.get("total") or 0),
+        )
+        ref = booking_ref(booking_id)
+        print(f"BOOKING SAVED TO DB: {ref} {booking}")
+
+        whatsapp.send_text(owner, customer_phone, format_confirmation(owner, booking, ref))
+
+        try:
+            notify_owner(owner, booking, ref)
+        except Exception as e:
+            print(f"Owner notify failed: {e}")
+
+        return clean_reply
+
+    except Exception as e:
+        print(f"Booking parse failed: {e}")
+        return reply_text.split("[BOOKING_CONFIRMED]")[0].strip()

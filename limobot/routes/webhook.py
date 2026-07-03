@@ -61,15 +61,15 @@ def receive_webhook(data: dict = Body(default={})):
             try:
                 media_id     = msg["audio"]["id"]
                 incoming_msg = whatsapp.transcribe_audio(owner, media_id)
-                print(f"[{owner['restaurant_name']}] {sender} | Voice transcribed: {incoming_msg}")
+                print(f"[{owner['business_name']}] {sender} | Voice transcribed: {incoming_msg}")
             except Exception as e:
                 print(f"Transcription failed: {e}")
                 whatsapp.send_text(owner, sender,
-                    "Sorry, I could not understand your voice message. Please try again or type your order.")
+                    "Sorry, I could not understand your voice message. Please try again or type your booking request.")
                 return PlainTextResponse("EVENT_RECEIVED")
         elif m_type == "text":
             incoming_msg = msg["text"]["body"].strip()
-            print(f"[{owner['restaurant_name']}] {sender} | Msg: {incoming_msg}")
+            print(f"[{owner['business_name']}] {sender} | Msg: {incoming_msg}")
         else:
             whatsapp.send_text(owner, sender, "Sorry, I can only handle text and voice messages.")
             return PlainTextResponse("EVENT_RECEIVED")

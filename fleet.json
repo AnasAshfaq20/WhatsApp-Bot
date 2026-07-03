@@ -1,0 +1,91 @@
+{
+  "business_name": "LuxRide Limousines",
+  "hours": "Available 24/7. Advance booking recommended, minimum 4 hours notice.",
+  "location": "Downtown head office, serving the entire metro area",
+  "service_area": "City-wide pickups, airport transfers, out-of-town trips on request.",
+  "currency": "$",
+  "fleet": {
+    "Luxury Sedans": [
+      {
+        "name": "Mercedes-Benz S-Class",
+        "capacity": 3,
+        "hourly_rate": 85,
+        "min_hours": 2,
+        "airport_rate": 120,
+        "desc": "Executive sedan with leather interior, WiFi and bottled water. Ideal for business travel and airport runs."
+      },
+      {
+        "name": "BMW 7 Series",
+        "capacity": 3,
+        "hourly_rate": 80,
+        "min_hours": 2,
+        "airport_rate": 110,
+        "desc": "Premium sedan, quiet ride, phone chargers and privacy glass."
+      }
+    ],
+    "Luxury SUVs": [
+      {
+        "name": "Cadillac Escalade",
+        "capacity": 6,
+        "hourly_rate": 110,
+        "min_hours": 2,
+        "airport_rate": 150,
+        "desc": "Full-size luxury SUV with room for luggage. Great for families and group airport transfers."
+      },
+      {
+        "name": "GMC Yukon Denali",
+        "capacity": 6,
+        "hourly_rate": 100,
+        "min_hours": 2,
+        "airport_rate": 140,
+        "desc": "Spacious SUV with captain chairs and rear climate control."
+      }
+    ],
+    "Stretch Limousines": [
+      {
+        "name": "Lincoln Stretch Limousine",
+        "capacity": 8,
+        "hourly_rate": 140,
+        "min_hours": 3,
+        "airport_rate": 200,
+        "desc": "Classic stretch limo with bar, mood lighting and premium sound. Perfect for weddings, proms and nights out."
+      },
+      {
+        "name": "Chrysler 300 Stretch",
+        "capacity": 10,
+        "hourly_rate": 155,
+        "min_hours": 3,
+        "airport_rate": 0,
+        "desc": "Modern stretch with fiber-optic ceiling, two bars and club seating."
+      }
+    ],
+    "Vans & Party Buses": [
+      {
+        "name": "Mercedes Sprinter Executive Van",
+        "capacity": 12,
+        "hourly_rate": 125,
+        "min_hours": 3,
+        "airport_rate": 180,
+        "desc": "Executive van with high roof, reclining seats and onboard WiFi. Ideal for corporate groups and tours."
+      },
+      {
+        "name": "Party Bus 20-Passenger",
+        "capacity": 20,
+        "hourly_rate": 195,
+        "min_hours": 4,
+        "airport_rate": 0,
+        "desc": "Full party bus with dance pole, LED lighting, premium sound and wet bar. Bachelor parties, birthdays, concerts."
+      }
+    ],
+    "Exotic & Wedding Cars": [
+      {
+        "name": "Rolls-Royce Phantom",
+        "capacity": 3,
+        "hourly_rate": 250,
+        "min_hours": 3,
+        "airport_rate": 350,
+        "desc": "Flagship wedding car with chauffeur in formal attire and red carpet service."
+      }
+    ]
+  }
+}
