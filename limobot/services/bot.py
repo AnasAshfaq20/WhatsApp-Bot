@@ -9,7 +9,7 @@ from ..db import get_fleet_dict, save_booking, booking_ref
 from ..config import now_pkt
 from . import whatsapp
 
-llm = ChatGroq(model="openai/gpt-oss-120b")
+llm = ChatGroq(model="openai/gpt-oss-120b", temperature=0.2)
 
 # In-memory conversation state, keyed by (owner_id, customer_phone)
 conversations = {}
@@ -57,9 +57,9 @@ BOOKING DETAILS TO COLLECT, IN THIS ORDER:
 6. Customer's full name — ask only at the end, right before confirmation.
 
 ONE QUESTION AT A TIME — THIS IS CRITICAL:
-- Ask for exactly ONE missing detail per message, then wait for the answer.
-- NEVER combine several questions in one message and NEVER send a numbered or bulleted list of questions. A message like "1. What date? 2. Where is pickup? 3. How many passengers?" is forbidden.
-- If the customer volunteers several details in one message, accept them all silently and ask only for the next single missing detail.
+- Every reply contains AT MOST ONE question. End the reply right after that question — no filler, no notes, no commentary about waiting.
+- Never ask for two or more details in the same message. Never send a list of questions.
+- If the customer volunteers several details in one message, accept them all and ask only for the next single missing detail.
 
 CONVERSATION RULES:
 1. Keep replies SHORT — this is WhatsApp, not email. Use line breaks, not paragraphs.
@@ -99,6 +99,15 @@ def clear_conversations():
     conversations.clear()
 
 
+def _enforce_single_question(reply):
+    """The LLM occasionally crams its whole checklist into one message
+    ("Where is pickup?Where is drop-off?How many passengers?..."). Keep
+    everything up to and including the FIRST question only."""
+    if reply.count("?") <= 1:
+        return reply
+    return reply[:reply.index("?") + 1].strip()
+
+
 def chat(owner, customer_phone, incoming_msg):
     """Run one turn of the conversation. Returns the reply text (may be empty)."""
     history = get_history(owner, customer_phone)
@@ -106,6 +115,8 @@ def chat(owner, customer_phone, incoming_msg):
 
     response = llm.invoke(history)
     reply    = response.content
+    if "[BOOKING_CONFIRMED]" not in reply and "[SEND_FLEET]" not in reply:
+        reply = _enforce_single_question(reply)
     history.append(AIMessage(content=reply))
 
     # Fleet card request
