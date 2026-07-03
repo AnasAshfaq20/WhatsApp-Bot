@@ -539,6 +539,18 @@
         ? `<div class="driver-row">Chauffeur: <b>${b.driver_name}</b>${b.driver_phone ? ' — +' + String(b.driver_phone).replace(/^\+/, '') : ''}</div>`
         : '';
 
+      const channel = b.channel || 'whatsapp';
+      const CHANNEL_META = {
+        whatsapp:  { label: 'WhatsApp',  icon: '💬' },
+        facebook:  { label: 'Messenger', icon: '📘' },
+        instagram: { label: 'Instagram', icon: '📸' },
+        voice:     { label: 'Phone Call', icon: '📞' }
+      };
+      const ch = CHANNEL_META[channel] || CHANNEL_META.whatsapp;
+      const contact = (channel === 'whatsapp' || channel === 'voice')
+        ? '📱 +' + b.phone
+        : ch.icon + ' ' + ch.label + ' user';
+
       const actions = actionButtons(b);
 
       return `
@@ -552,7 +564,8 @@
           </div>
           <div class="card-body">
             <div class="phone-row">
-              👤 ${b.name || 'Guest'} &nbsp;|&nbsp; 📱 +${b.phone}
+              👤 ${b.name || 'Guest'} &nbsp;|&nbsp; ${contact}
+              <span class="type-chip">${ch.icon} ${ch.label}</span>
             </div>
             <div class="vehicle-row">
               <span>🚘 ${b.vehicle}</span>

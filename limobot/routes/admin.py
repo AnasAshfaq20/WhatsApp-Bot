@@ -58,6 +58,9 @@ def add_owner(payload: dict = Body(default={}), session: dict = Depends(require_
         fleet_image_url   = payload.get("fleet_image_url", ""),
         voice_phone       = payload.get("voice_phone", ""),
         currency          = payload.get("currency", "$") or "$",
+        fb_page_id        = payload.get("fb_page_id", ""),
+        fb_page_token     = payload.get("fb_page_token", ""),
+        ig_account_id     = payload.get("ig_account_id", ""),
     )
 
     # Plaintext password is returned ONCE so the admin can share it

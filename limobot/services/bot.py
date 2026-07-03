@@ -7,7 +7,7 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
 from ..db import get_fleet_dict, save_booking, booking_ref
 from ..config import now_pkt
-from . import whatsapp
+from . import whatsapp, channels
 
 llm = ChatGroq(model="openai/gpt-oss-120b", temperature=0.2)
 
@@ -124,8 +124,12 @@ def _enforce_single_question(reply):
     return reply[:reply.index("?") + 1].strip()
 
 
-def chat(owner, customer_phone, incoming_msg):
-    """Run one turn of the conversation. Returns the reply text (may be empty)."""
+def chat(owner, customer_phone, incoming_msg, channel="whatsapp"):
+    """Run one turn of the conversation. Returns the reply text (may be empty).
+
+    customer_phone is the sender id on the channel: a phone number on WhatsApp,
+    a PSID on Messenger, an IGSID on Instagram.
+    """
     history = get_history(owner, customer_phone)
     history.append(HumanMessage(content=incoming_msg))
 
@@ -138,7 +142,7 @@ def chat(owner, customer_phone, incoming_msg):
     # Fleet card request
     if "[SEND_FLEET]" in reply:
         if owner.get("fleet_image_url"):
-            whatsapp.send_image(owner, customer_phone, owner["fleet_image_url"],
+            channels.send_image(owner, channel, customer_phone, owner["fleet_image_url"],
                                 "Here is our fleet. Which vehicle would you like to book?")
             reply = reply.replace("[SEND_FLEET]", "").strip()
         else:
@@ -150,7 +154,7 @@ def chat(owner, customer_phone, incoming_msg):
             reply = llm.invoke(history).content.replace("[SEND_FLEET]", "").strip()
             history.append(AIMessage(content=reply))
 
-    reply = _extract_and_log_booking(owner, reply, customer_phone)
+    reply = _extract_and_log_booking(owner, reply, customer_phone, channel)
     return reply
 
 
@@ -192,6 +196,7 @@ def notify_owner(owner, booking, ref):
         "NEW BOOKING RECEIVED",
         "=" * 28,
         f"Reference: {ref}",
+        f"Channel: {booking.get('channel', 'whatsapp').title()}",
         f"Received: {now_pkt().strftime('%d %b %Y, %I:%M %p')}",
         f"Customer: {booking.get('name', 'Guest')} (+{booking['phone']})",
         "-" * 28,
@@ -212,7 +217,7 @@ def notify_owner(owner, booking, ref):
     print(f"Owner notified at {owner['admin_phone']}")
 
 
-def _extract_and_log_booking(owner, reply_text, customer_phone):
+def _extract_and_log_booking(owner, reply_text, customer_phone, channel="whatsapp"):
     if "[BOOKING_CONFIRMED]" not in reply_text:
         return reply_text
     try:
@@ -222,6 +227,7 @@ def _extract_and_log_booking(owner, reply_text, customer_phone):
 
         booking = json.loads(json_part)
         booking["phone"] = customer_phone
+        booking["channel"] = channel
 
         booking_id = save_booking(
             owner_id         = owner["id"],
@@ -236,11 +242,13 @@ def _extract_and_log_booking(owner, reply_text, customer_phone):
             passengers       = int(booking.get("passengers") or 1),
             occasion         = booking.get("occasion", ""),
             total            = int(booking.get("total") or 0),
+            channel          = channel,
         )
         ref = booking_ref(booking_id)
         print(f"BOOKING SAVED TO DB: {ref} {booking}")
 
-        whatsapp.send_text(owner, customer_phone, format_confirmation(owner, booking, ref))
+        channels.send_text(owner, channel, customer_phone,
+                           format_confirmation(owner, booking, ref))
 
         try:
             notify_owner(owner, booking, ref)

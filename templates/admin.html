@@ -288,6 +288,9 @@
       <div class="field full"><label>WhatsApp Token</label><input id="f-whatsapp_token" placeholder="EAAxxxx..."></div>
       <div class="field"><label>WhatsApp Phone ID</label><input id="f-whatsapp_phone_id" placeholder="1132931713234299"></div>
       <div class="field full"><label>Voice Agent Number (the number customers call)</label><input id="f-voice_phone" placeholder="+1 555 000 1111"></div>
+      <div class="field"><label>Facebook Page ID</label><input id="f-fb_page_id" placeholder="1029384756"></div>
+      <div class="field"><label>Instagram Account ID</label><input id="f-ig_account_id" placeholder="17841400000000000"></div>
+      <div class="field full"><label>Facebook Page Token (used for Messenger + Instagram DMs)</label><input id="f-fb_page_token" placeholder="EAAxxxx..."></div>
       <div class="field full">
         <label>Fleet Card Image (PNG/JPG/WebP, max 5 MB — sent to customers on WhatsApp)</label>
         <input type="file" id="f-fleet_file" accept="image/png,image/jpeg,image/webp">
@@ -358,7 +361,8 @@
 
   const FIELDS = ['username','owner_name','business_name','hours','admin_phone',
                   'location','service_area','currency','whatsapp_token',
-                  'whatsapp_phone_id','voice_phone'];
+                  'whatsapp_phone_id','voice_phone','fb_page_id','fb_page_token',
+                  'ig_account_id'];
 
   async function fetchOwners() {
     const r = await fetch('/admin/owners');

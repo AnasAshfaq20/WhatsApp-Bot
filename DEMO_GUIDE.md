@@ -1,8 +1,26 @@
-# LuxRide — WhatsApp Limo Booking Bot (Client Demo Guide)
+# LuxRide — Omnichannel Limo Booking Bot (Client Demo Guide)
 
-Multi-tenant WhatsApp + voice booking platform for limousine / chauffeured car rental
-businesses. Customers book over WhatsApp chat (text or voice notes) or by phone call;
-bookings appear live on the dispatch dashboard.
+Multi-tenant booking platform for limousine / chauffeured car rental businesses.
+Customers book over **WhatsApp** (text or voice notes), **Facebook Messenger**,
+**Instagram DM**, or by **phone call**; all bookings appear live on the dispatch
+dashboard with a channel badge.
+
+## Connecting Facebook Messenger + Instagram
+
+All three chat channels share the same `/webhook` endpoint and verify token.
+In the same Meta app that hosts the WhatsApp product:
+
+1. **Messenger**: Add the *Messenger* product → connect the client's Facebook Page →
+   generate a **Page access token**. Under Webhooks, subscribe the page to the
+   `messages` field with the same callback URL + verify token.
+2. **Instagram**: The IG account must be a professional account linked to that
+   Facebook Page. Add the *Instagram* product → subscribe to `messages`. The same
+   Page token is used for sending.
+3. In the **admin panel**, edit the company and fill in **Facebook Page ID**,
+   **Instagram Account ID** and **Facebook Page Token**.
+4. In dev mode this works for app admins/testers immediately; public access to
+   Messenger/Instagram messaging requires Meta app review
+   (`pages_messaging`, `instagram_manage_messages`).
 
 ## What changed from the restaurant version
 

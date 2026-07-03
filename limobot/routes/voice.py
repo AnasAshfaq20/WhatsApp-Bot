@@ -78,14 +78,16 @@ def voice_booking(request: Request, payload: dict = Body(default={})):
         owner_id=owner["id"], phone=customer_phone, name=name, vehicle=vehicle,
         booking_type=booking_type, pickup_location=pickup_location,
         dropoff_location=dropoff_location, pickup_time=pickup_time,
-        hours=hours, passengers=passengers, occasion=occasion, total=total)
+        hours=hours, passengers=passengers, occasion=occasion, total=total,
+        channel="voice")
     ref = booking_ref(booking_id)
     print(f"[{owner['business_name']}] VOICE BOOKING SAVED: {ref} {name} / {vehicle} / {total}")
 
     booking = {"name": name, "vehicle": vehicle, "booking_type": booking_type,
                "pickup_location": pickup_location, "dropoff_location": dropoff_location,
                "pickup_time": pickup_time, "hours": hours, "passengers": passengers,
-               "occasion": occasion, "total": total, "phone": customer_phone}
+               "occasion": occasion, "total": total, "phone": customer_phone,
+               "channel": "voice"}
 
     # ── Notify owner + send the caller a WhatsApp confirmation (best-effort) ──
     try:

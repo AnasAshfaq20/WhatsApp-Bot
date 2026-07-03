@@ -3,7 +3,7 @@ from fastapi.responses import RedirectResponse, Response, PlainTextResponse
 
 from ..db import (get_owner_by_id, get_bookings_for_owner, update_booking_status_db,
                   get_fleet_image)
-from ..services import bot, whatsapp
+from ..services import bot, channels
 from ..templating import templates
 from .auth import require_login
 
@@ -106,7 +106,8 @@ def update_booking_status(request: Request, payload: dict = Body(default={}),
                     driver_line += f" (+{booking['driver_phone'].lstrip('+')})"
                 driver_line += "."
             try:
-                whatsapp.send_text(owner, booking["phone"], template.format(
+                channels.send_text(owner, booking.get("channel", "whatsapp"),
+                                   booking["phone"], template.format(
                     ref=booking["ref"], business=owner["business_name"],
                     driver_line=driver_line))
             except Exception as e:

@@ -9,13 +9,14 @@ import json
 from fastapi.testclient import TestClient
 
 from app import app
-from limobot.services import whatsapp, bot
+from limobot.services import whatsapp, bot, channels
 from limobot import db, config
 
-# Intercept ALL outgoing WhatsApp calls
+# Intercept ALL outgoing WhatsApp + Messenger/Instagram calls
 sent = []
 whatsapp.send_text = lambda owner, to, body: sent.append(("text", owner["username"], to, body))
 whatsapp.send_image = lambda owner, to, url, caption="": sent.append(("image", owner["username"], to, url))
+channels._page_send = lambda owner, to, message: sent.append(("page", owner["username"], to, message.get("text", "")))
 
 passed, failed = [], []
 
@@ -147,7 +148,7 @@ check("disabled owner webhook dropped", db.get_owner_by_phone_id("5550001111") i
 # ==== 10. FULL WEBHOOK PATH (2nd owner re-enabled) ====
 c.put(f"/admin/owners/{el_id}", json={"active": True})
 sent.clear()
-payload = {"entry": [{"changes": [{"value": {
+payload = {"object": "whatsapp_business_account", "entry": [{"changes": [{"value": {
     "metadata": {"phone_number_id": "5550001111"},
     "messages": [{"from": "92388WEBHOOK", "type": "text", "id": "wbtest1", "text": {"body": "hello"}}]
 }}]}]}
@@ -160,13 +161,42 @@ sent.clear()
 c.post("/webhook", json=payload)
 check("duplicate message id ignored", len(sent) == 0, sent)
 
-payload2 = {"entry": [{"changes": [{"value": {
+payload2 = {"object": "whatsapp_business_account", "entry": [{"changes": [{"value": {
     "metadata": {"phone_number_id": "5550001111"},
     "messages": [{"from": "92388WEBHOOK", "type": "sticker", "id": "wbtest2"}]
 }}]}]}
 sent.clear()
 c.post("/webhook", json=payload2)
 check("unsupported type gets polite reply", any("text and voice" in s[3] for s in sent))
+
+# ==== 10b. FACEBOOK MESSENGER + INSTAGRAM WEBHOOKS ====
+db.update_owner(el_id, {"fb_page_id": "777888", "ig_account_id": "999000"})
+sent.clear()
+fb_payload = {"object": "page", "entry": [{"id": "777888", "messaging": [
+    {"sender": {"id": "PSID123"}, "recipient": {"id": "777888"},
+     "message": {"mid": "fb1", "text": "hello"}}]}]}
+r = c.post("/webhook", json=fb_payload)
+check("messenger webhook 200", r.status_code == 200)
+check("messenger reply sent via page API",
+      any(s[0] == "page" and s[1] == "elitelimos" and s[2] == "PSID123" for s in sent), sent)
+
+sent.clear()
+echo_payload = {"object": "page", "entry": [{"id": "777888", "messaging": [
+    {"sender": {"id": "777888"}, "recipient": {"id": "PSID123"},
+     "message": {"mid": "fb2", "text": "our own echo", "is_echo": True}}]}]}
+c.post("/webhook", json=echo_payload)
+check("messenger echo ignored", len(sent) == 0, sent)
+
+sent.clear()
+ig_payload = {"object": "instagram", "entry": [{"id": "999000", "messaging": [
+    {"sender": {"id": "IGSID456"}, "recipient": {"id": "999000"},
+     "message": {"mid": "ig1", "text": "hi, do you have SUVs?"}}]}]}
+r = c.post("/webhook", json=ig_payload)
+check("instagram webhook 200", r.status_code == 200)
+check("instagram reply sent via page API",
+      any(s[0] == "page" and s[2] == "IGSID456" for s in sent), sent)
+check("channel conversations isolated",
+      (el_id, "PSID123") in bot.conversations and (el_id, "IGSID456") in bot.conversations)
 
 # ==== 11. WEBHOOK VERIFY (GET) ====
 r = c.get("/webhook", params={"hub.mode": "subscribe",

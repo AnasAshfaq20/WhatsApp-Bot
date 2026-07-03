@@ -70,6 +70,11 @@ def init_db():
     # Currency symbol shown to customers (e.g. $, Rs., AED)
     c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT '$'")
 
+    # Facebook Messenger + Instagram DM channels (same Meta app, per-owner page)
+    c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS fb_page_id TEXT DEFAULT ''")
+    c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS fb_page_token TEXT DEFAULT ''")
+    c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS ig_account_id TEXT DEFAULT ''")
+
     c.execute("""
         CREATE TABLE IF NOT EXISTS vehicles (
             id           SERIAL PRIMARY KEY,
@@ -106,6 +111,8 @@ def init_db():
             created_at       TEXT    NOT NULL
         )
     """)
+    # Where the booking came from: whatsapp, facebook, instagram, voice
+    c.execute("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS channel TEXT DEFAULT 'whatsapp'")
 
     conn.commit()
 
@@ -180,19 +187,22 @@ def _seed_fleet_from_json(cursor, owner_id):
 # ──────────────────────────────────────────────
 def create_owner(username, password, owner_name, business_name, hours, location,
                  service_area, whatsapp_token, whatsapp_phone_id, admin_phone,
-                 fleet_image_url, voice_phone="", currency="$"):
+                 fleet_image_url, voice_phone="", currency="$",
+                 fb_page_id="", fb_page_token="", ig_account_id=""):
     conn = get_db()
     c = conn.cursor()
     c.execute(
         """INSERT INTO owners (username, password_hash, owner_name, business_name,
                                hours, location, service_area, currency,
                                whatsapp_token, whatsapp_phone_id, admin_phone,
-                               fleet_image_url, voice_phone, created_at)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                               fleet_image_url, voice_phone,
+                               fb_page_id, fb_page_token, ig_account_id, created_at)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
            RETURNING id""",
         (username, generate_password_hash(password), owner_name, business_name,
          hours, location, service_area, currency, whatsapp_token, whatsapp_phone_id,
-         admin_phone, fleet_image_url, voice_phone, datetime.now().isoformat()),
+         admin_phone, fleet_image_url, voice_phone,
+         fb_page_id, fb_page_token, ig_account_id, datetime.now().isoformat()),
     )
     owner_id = c.fetchone()[0]
     conn.commit()
@@ -204,7 +214,8 @@ def update_owner(owner_id, fields):
     """Update allowed owner fields. fields: dict of column -> value."""
     allowed = {"owner_name", "business_name", "hours", "location", "service_area",
                "whatsapp_token", "whatsapp_phone_id", "admin_phone", "currency",
-               "fleet_image_url", "voice_phone", "active", "username"}
+               "fleet_image_url", "voice_phone", "active", "username",
+               "fb_page_id", "fb_page_token", "ig_account_id"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if "password" in fields and fields["password"]:
         updates["password_hash"] = generate_password_hash(fields["password"])
@@ -233,7 +244,8 @@ def delete_owner(owner_id):
 # Owner columns without the raw image bytes (too heavy for regular queries)
 OWNER_COLS = ("id, username, password_hash, owner_name, business_name, hours, "
               "location, service_area, currency, whatsapp_token, whatsapp_phone_id, "
-              "admin_phone, fleet_image_url, voice_phone, active, created_at")
+              "admin_phone, fleet_image_url, voice_phone, active, created_at, "
+              "fb_page_id, fb_page_token, ig_account_id")
 
 
 def get_owner_by_id(owner_id):
@@ -262,6 +274,28 @@ def get_owner_by_phone_id(whatsapp_phone_id):
                   WHERE whatsapp_phone_id = %s AND active = TRUE
                   ORDER BY id DESC LIMIT 1""",
               (whatsapp_phone_id,))
+    row = c.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_owner_by_fb_page(fb_page_id):
+    conn = get_db()
+    c = dict_cursor(conn)
+    c.execute(f"""SELECT {OWNER_COLS} FROM owners
+                  WHERE fb_page_id = %s AND active = TRUE
+                  ORDER BY id DESC LIMIT 1""", (str(fb_page_id),))
+    row = c.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_owner_by_ig_account(ig_account_id):
+    conn = get_db()
+    c = dict_cursor(conn)
+    c.execute(f"""SELECT {OWNER_COLS} FROM owners
+                  WHERE ig_account_id = %s AND active = TRUE
+                  ORDER BY id DESC LIMIT 1""", (str(ig_account_id),))
     row = c.fetchone()
     conn.close()
     return dict(row) if row else None
@@ -415,18 +449,20 @@ def get_fleet_dict(owner):
 # BOOKINGS
 # ──────────────────────────────────────────────
 def save_booking(owner_id, phone, name, vehicle, booking_type, pickup_location,
-                 dropoff_location, pickup_time, hours, passengers, occasion, total):
+                 dropoff_location, pickup_time, hours, passengers, occasion, total,
+                 channel="whatsapp"):
     conn = get_db()
     c = conn.cursor()
     c.execute(
         """INSERT INTO bookings (owner_id, phone, name, vehicle, booking_type,
                                  pickup_location, dropoff_location, pickup_time,
-                                 hours, passengers, occasion, total, status, created_at)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s)
+                                 hours, passengers, occasion, total, status, channel,
+                                 created_at)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s, %s)
            RETURNING id""",
         (owner_id, phone, name, vehicle, booking_type, pickup_location,
          dropoff_location, pickup_time, hours, passengers, occasion, total,
-         now_utc().isoformat()),
+         channel, now_utc().isoformat()),
     )
     booking_id = c.fetchone()[0]
     conn.commit()
