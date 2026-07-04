@@ -55,8 +55,20 @@ def transcribe_audio(owner, media_id):
     if not audio_resp.ok:
         raise Exception(f"Failed to download audio: {audio_resp.text}")
 
+    return _whisper(audio_resp.content)
+
+
+def transcribe_audio_url(audio_url):
+    """Transcribe a voice note from a direct CDN URL (Messenger/Instagram attachments)."""
+    audio_resp = requests.get(audio_url, timeout=30)
+    if not audio_resp.ok:
+        raise Exception(f"Failed to download audio: {audio_resp.status_code}")
+    return _whisper(audio_resp.content)
+
+
+def _whisper(audio_bytes):
     transcription = groq_client.audio.transcriptions.create(
-        file=("voice.ogg", audio_resp.content, "audio/ogg"),
+        file=("voice.ogg", audio_bytes, "audio/ogg"),
         model="whisper-large-v3",
         language="en",
     )

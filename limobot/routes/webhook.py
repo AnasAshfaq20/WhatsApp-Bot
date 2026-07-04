@@ -106,6 +106,14 @@ def _handle_whatsapp(data):
 
 
 # ── Facebook Messenger + Instagram DM (same event shape) ──
+def _audio_attachment_url(message):
+    """CDN URL of the first audio attachment on a Messenger/Instagram message."""
+    for att in message.get("attachments") or []:
+        if att.get("type") == "audio":
+            return (att.get("payload") or {}).get("url")
+    return None
+
+
 def _handle_page(data, channel):
     for entry in data.get("entry", []):
         account_id = str(entry.get("id", ""))
@@ -132,11 +140,22 @@ def _handle_page(data, channel):
 
             text = (message.get("text") or "").strip()
             if not text:
-                channels.send_text(owner, channel, sender,
-                    "Sorry, I can only handle text messages here. Please type your booking request.")
-                continue
-
-            print(f"[{owner['business_name']}] {channel.upper()} {sender} | Msg: {text}")
+                audio_url = _audio_attachment_url(message)
+                if audio_url:
+                    try:
+                        text = whatsapp.transcribe_audio_url(audio_url)
+                        print(f"[{owner['business_name']}] {channel.upper()} {sender} | Voice transcribed: {text}")
+                    except Exception as e:
+                        print(f"Transcription failed: {e}")
+                        channels.send_text(owner, channel, sender,
+                            "Sorry, I could not understand your voice message. Please try again or type your booking request.")
+                        continue
+                else:
+                    channels.send_text(owner, channel, sender,
+                        "Sorry, I can only handle text and voice messages here. Please type your booking request.")
+                    continue
+            else:
+                print(f"[{owner['business_name']}] {channel.upper()} {sender} | Msg: {text}")
             reply = bot.chat(owner, sender, text, channel=channel)
             if reply:
                 print(f"Reply: {reply}")
