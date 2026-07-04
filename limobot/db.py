@@ -74,6 +74,9 @@ def init_db():
     c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS fb_page_id TEXT DEFAULT ''")
     c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS fb_page_token TEXT DEFAULT ''")
     c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS ig_account_id TEXT DEFAULT ''")
+    # "Instagram Login" accounts have their own token + app-scoped user id
+    c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS ig_token TEXT DEFAULT ''")
+    c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS ig_app_id TEXT DEFAULT ''")
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS vehicles (
@@ -215,7 +218,7 @@ def update_owner(owner_id, fields):
     allowed = {"owner_name", "business_name", "hours", "location", "service_area",
                "whatsapp_token", "whatsapp_phone_id", "admin_phone", "currency",
                "fleet_image_url", "voice_phone", "active", "username",
-               "fb_page_id", "fb_page_token", "ig_account_id"}
+               "fb_page_id", "fb_page_token", "ig_account_id", "ig_token", "ig_app_id"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if "password" in fields and fields["password"]:
         updates["password_hash"] = generate_password_hash(fields["password"])
@@ -245,7 +248,7 @@ def delete_owner(owner_id):
 OWNER_COLS = ("id, username, password_hash, owner_name, business_name, hours, "
               "location, service_area, currency, whatsapp_token, whatsapp_phone_id, "
               "admin_phone, fleet_image_url, voice_phone, active, created_at, "
-              "fb_page_id, fb_page_token, ig_account_id")
+              "fb_page_id, fb_page_token, ig_account_id, ig_token, ig_app_id")
 
 
 def get_owner_by_id(owner_id):
@@ -291,11 +294,14 @@ def get_owner_by_fb_page(fb_page_id):
 
 
 def get_owner_by_ig_account(ig_account_id):
+    """Webhook entry.id may be the IG professional id or the app-scoped id
+    depending on how the account was connected — match either."""
     conn = get_db()
     c = dict_cursor(conn)
     c.execute(f"""SELECT {OWNER_COLS} FROM owners
-                  WHERE ig_account_id = %s AND active = TRUE
-                  ORDER BY id DESC LIMIT 1""", (str(ig_account_id),))
+                  WHERE (ig_account_id = %s OR ig_app_id = %s) AND active = TRUE
+                  ORDER BY id DESC LIMIT 1""",
+              (str(ig_account_id), str(ig_account_id)))
     row = c.fetchone()
     conn.close()
     return dict(row) if row else None

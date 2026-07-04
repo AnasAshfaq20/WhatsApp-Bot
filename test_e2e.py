@@ -16,7 +16,7 @@ from limobot import db, config
 sent = []
 whatsapp.send_text = lambda owner, to, body: sent.append(("text", owner["username"], to, body))
 whatsapp.send_image = lambda owner, to, url, caption="": sent.append(("image", owner["username"], to, url))
-channels._page_send = lambda owner, to, message: sent.append(("page", owner["username"], to, message.get("text", "")))
+channels._page_send = lambda owner, channel, to, message: sent.append(("page", owner["username"], to, message.get("text", "")))
 
 passed, failed = [], []
 
