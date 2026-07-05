@@ -47,13 +47,23 @@ def send_text(owner, channel, to, body):
         whatsapp.send_text(owner, to, body)
 
 
-def send_audio(owner, channel, to, audio_url):
-    if channel in (FACEBOOK, INSTAGRAM):
+def send_voice_clip(owner, channel, to, clip_id, base_url):
+    """Deliver a generated TTS clip the way each platform actually plays it:
+    FB/IG fetch a URL (Instagram needs wav); WhatsApp needs the bytes uploaded."""
+    from . import tts  # local import — tts pulls in the Groq client
+
+    if channel == INSTAGRAM:
         _page_send(owner, channel, to, {
-            "attachment": {"type": "audio", "payload": {"url": audio_url, "is_reusable": True}}
+            "attachment": {"type": "audio",
+                           "payload": {"url": f"{base_url}/tts/{clip_id}.wav", "is_reusable": True}}
+        })
+    elif channel == FACEBOOK:
+        _page_send(owner, channel, to, {
+            "attachment": {"type": "audio",
+                           "payload": {"url": f"{base_url}/tts/{clip_id}.mp3", "is_reusable": True}}
         })
     else:
-        whatsapp.send_audio(owner, to, audio_url)
+        whatsapp.send_audio_bytes(owner, to, tts.get_clip(clip_id, "mp3"))
 
 
 def send_image(owner, channel, to, image_url, caption=""):

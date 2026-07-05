@@ -106,16 +106,19 @@ def _wav_to_mp3(wav_bytes):
         pcm      = w.readframes(w.getnframes())
     if width != 2:
         raise ValueError(f"Expected 16-bit PCM, got {width * 8}-bit")
-    # Orpheus outputs 24 kHz; mp3 at that rate is MPEG-2, which WhatsApp's
-    # MOBILE player renders as silence. Upsample to 48 kHz for plain MPEG-1.
-    if rate < 32000:
-        pcm, _ = audioop.ratecv(pcm, width, channels, rate, 48000, None)
-        rate = 48000
+    # WhatsApp mobile is picky: the verified-working combination is a
+    # 44.1 kHz stereo MPEG-1 mp3 delivered via media upload (not by link)
+    if rate != 44100:
+        pcm, _ = audioop.ratecv(pcm, width, channels, rate, 44100, None)
+        rate = 44100
+    if channels == 1:
+        pcm = audioop.tostereo(pcm, width, 1, 1)
+        channels = 2
     enc = lameenc.Encoder()
-    enc.set_bit_rate(96)
+    enc.set_bit_rate(128)
     enc.set_in_sample_rate(rate)
     enc.set_channels(channels)
-    enc.set_quality(5)
+    enc.set_quality(2)
     return bytes(enc.encode(pcm)) + bytes(enc.flush())
 
 

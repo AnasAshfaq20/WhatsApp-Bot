@@ -30,12 +30,28 @@ def send_text(owner, to, body):
         print(f"Meta API error: {r.status_code} {r.text}")
 
 
-def send_audio(owner, to, audio_url):
+def send_audio_bytes(owner, to, audio_bytes, mime="audio/mpeg"):
+    """Upload the clip to WhatsApp and send by media id.
+
+    Link-based audio sends play on desktop but are silent on the mobile app;
+    uploaded media plays everywhere."""
+    upload_url = f"{config.GRAPH_API_BASE}/{owner['whatsapp_phone_id']}/media"
+    r = requests.post(
+        upload_url,
+        headers={"Authorization": f"Bearer {owner['whatsapp_token']}"},
+        data={"messaging_product": "whatsapp"},
+        files={"file": ("voice.mp3", audio_bytes, mime)},
+    )
+    if not r.ok:
+        print(f"Meta API media upload error: {r.status_code} {r.text}")
+        return
+    media_id = r.json().get("id")
+
     payload = {
         "messaging_product": "whatsapp",
         "to":   to,
         "type": "audio",
-        "audio": {"link": audio_url},
+        "audio": {"id": media_id},
     }
     r = requests.post(_messages_url(owner), headers=_headers(owner), json=payload)
     if not r.ok:

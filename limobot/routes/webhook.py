@@ -25,9 +25,7 @@ def _send_voice_reply(owner, channel, recipient, reply, base_url):
         spoken = tts.speechify(reply)
         print(f"Spoken version: {spoken}")
         clip_id = tts.synthesize(spoken)
-        # Instagram's Send API rejects mp3; wav works there
-        ext = "wav" if channel == channels.INSTAGRAM else "mp3"
-        channels.send_audio(owner, channel, recipient, f"{base_url}/tts/{clip_id}.{ext}")
+        channels.send_voice_clip(owner, channel, recipient, clip_id, base_url)
         print(f"Voice reply sent ({channel})")
     except Exception as e:
         print(f"Voice reply failed (text already delivered): {e}")
