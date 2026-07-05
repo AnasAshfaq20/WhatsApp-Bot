@@ -37,10 +37,20 @@ def fleet_image(owner_id: int):
 @router.get("/tts/{clip_id}.mp3")
 def tts_clip(clip_id: str):
     """Public — Meta platforms fetch generated voice replies from here."""
-    audio = tts.get_clip(clip_id)
+    audio = tts.get_clip(clip_id, "mp3")
     if not audio:
         return PlainTextResponse("Not found", status_code=404)
     return Response(content=audio, media_type="audio/mpeg",
+                    headers={"Cache-Control": "public, max-age=3600"})
+
+
+@router.get("/tts/{clip_id}.wav")
+def tts_clip_wav(clip_id: str):
+    """Instagram's Send API accepts wav but not mp3."""
+    audio = tts.get_clip(clip_id, "wav")
+    if not audio:
+        return PlainTextResponse("Not found", status_code=404)
+    return Response(content=audio, media_type="audio/wav",
                     headers={"Cache-Control": "public, max-age=3600"})
 
 

@@ -133,12 +133,14 @@ def synthesize(text):
     audio = _wav_to_mp3(wav)
 
     clip_id = uuid.uuid4().hex
-    _audio_cache[clip_id] = audio
+    # Keep both: WhatsApp/Messenger take mp3, Instagram only accepts wav/m4a
+    _audio_cache[clip_id] = {"mp3": audio, "wav": wav}
     while len(_audio_cache) > _MAX_CLIPS:
         _audio_cache.popitem(last=False)
     return clip_id
 
 
-def get_clip(clip_id):
-    """mp3 bytes or None."""
-    return _audio_cache.get(clip_id)
+def get_clip(clip_id, fmt="mp3"):
+    """Audio bytes in the requested format, or None."""
+    entry = _audio_cache.get(clip_id)
+    return entry.get(fmt) if entry else None
