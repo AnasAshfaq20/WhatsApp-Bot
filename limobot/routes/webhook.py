@@ -22,7 +22,9 @@ def _public_base(request):
 def _send_voice_reply(owner, channel, recipient, reply, base_url):
     """Best-effort spoken version of the reply — text has already been sent."""
     try:
-        clip_id = tts.synthesize(reply)
+        spoken = tts.speechify(reply)
+        print(f"Spoken version: {spoken}")
+        clip_id = tts.synthesize(spoken)
         channels.send_audio(owner, channel, recipient, f"{base_url}/tts/{clip_id}.mp3")
         print(f"Voice reply sent ({channel})")
     except Exception as e:
