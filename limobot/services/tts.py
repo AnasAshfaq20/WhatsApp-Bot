@@ -5,6 +5,7 @@ mp3 with lameenc (pure wheel, no system ffmpeg needed). Generated clips are
 kept in a small in-memory cache and served publicly from /tts/{id}.mp3 so
 Meta's platforms can fetch them as audio attachments.
 """
+import audioop
 import io
 import os
 import uuid
@@ -105,8 +106,13 @@ def _wav_to_mp3(wav_bytes):
         pcm      = w.readframes(w.getnframes())
     if width != 2:
         raise ValueError(f"Expected 16-bit PCM, got {width * 8}-bit")
+    # Orpheus outputs 24 kHz; mp3 at that rate is MPEG-2, which WhatsApp's
+    # MOBILE player renders as silence. Upsample to 48 kHz for plain MPEG-1.
+    if rate < 32000:
+        pcm, _ = audioop.ratecv(pcm, width, channels, rate, 48000, None)
+        rate = 48000
     enc = lameenc.Encoder()
-    enc.set_bit_rate(64)
+    enc.set_bit_rate(96)
     enc.set_in_sample_rate(rate)
     enc.set_channels(channels)
     enc.set_quality(5)
