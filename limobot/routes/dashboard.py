@@ -3,7 +3,7 @@ from fastapi.responses import RedirectResponse, Response, PlainTextResponse
 
 from ..db import (get_owner_by_id, get_bookings_for_owner, update_booking_status_db,
                   get_fleet_image)
-from ..services import bot, channels
+from ..services import bot, channels, tts
 from ..templating import templates
 from .auth import require_login
 
@@ -32,6 +32,16 @@ def fleet_image(owner_id: int):
     data, mime = img
     return Response(content=data, media_type=mime,
                     headers={"Cache-Control": "public, max-age=300"})
+
+
+@router.get("/tts/{clip_id}.mp3")
+def tts_clip(clip_id: str):
+    """Public — Meta platforms fetch generated voice replies from here."""
+    audio = tts.get_clip(clip_id)
+    if not audio:
+        return PlainTextResponse("Not found", status_code=404)
+    return Response(content=audio, media_type="audio/mpeg",
+                    headers={"Cache-Control": "public, max-age=3600"})
 
 
 @router.get("/bookings")

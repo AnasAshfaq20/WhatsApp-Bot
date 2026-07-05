@@ -30,6 +30,18 @@ def send_text(owner, to, body):
         print(f"Meta API error: {r.status_code} {r.text}")
 
 
+def send_audio(owner, to, audio_url):
+    payload = {
+        "messaging_product": "whatsapp",
+        "to":   to,
+        "type": "audio",
+        "audio": {"link": audio_url},
+    }
+    r = requests.post(_messages_url(owner), headers=_headers(owner), json=payload)
+    if not r.ok:
+        print(f"Meta API audio error: {r.status_code} {r.text}")
+
+
 def send_image(owner, to, image_url, caption=""):
     payload = {
         "messaging_product": "whatsapp",

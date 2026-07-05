@@ -47,6 +47,15 @@ def send_text(owner, channel, to, body):
         whatsapp.send_text(owner, to, body)
 
 
+def send_audio(owner, channel, to, audio_url):
+    if channel in (FACEBOOK, INSTAGRAM):
+        _page_send(owner, channel, to, {
+            "attachment": {"type": "audio", "payload": {"url": audio_url, "is_reusable": True}}
+        })
+    else:
+        whatsapp.send_audio(owner, to, audio_url)
+
+
 def send_image(owner, channel, to, image_url, caption=""):
     if channel in (FACEBOOK, INSTAGRAM):
         _page_send(owner, channel, to, {

@@ -3,12 +3,30 @@ from fastapi.responses import PlainTextResponse
 
 from .. import config
 from ..db import get_owner_by_phone_id, get_owner_by_fb_page, get_owner_by_ig_account
-from ..services import bot, whatsapp, channels
+from ..services import bot, whatsapp, channels, tts
 
 router = APIRouter()
 
 # Deduplication — Meta sometimes retries webhooks
 processed_message_ids = set()
+
+
+def _public_base(request):
+    """Public https base URL of this app (Meta must be able to fetch from it)."""
+    base = str(request.base_url).rstrip("/")
+    if base.startswith("http://") and "localhost" not in base and "127.0.0.1" not in base:
+        base = "https://" + base[len("http://"):]
+    return base
+
+
+def _send_voice_reply(owner, channel, recipient, reply, base_url):
+    """Best-effort spoken version of the reply — text has already been sent."""
+    try:
+        clip_id = tts.synthesize(reply)
+        channels.send_audio(owner, channel, recipient, f"{base_url}/tts/{clip_id}.mp3")
+        print(f"Voice reply sent ({channel})")
+    except Exception as e:
+        print(f"Voice reply failed (text already delivered): {e}")
 
 
 def _seen(message_id):
@@ -34,17 +52,18 @@ def verify_webhook(request: Request):
 
 
 @router.post("/webhook")
-def receive_webhook(data: dict = Body(default={})):
+def receive_webhook(request: Request, data: dict = Body(default={})):
+    base_url = _public_base(request)
     try:
         obj = data.get("object", "")
         # WhatsApp payloads carry entry[].changes; be lenient if object is missing
         if obj == "whatsapp_business_account" or (
                 not obj and data.get("entry", [{}])[0].get("changes")):
-            _handle_whatsapp(data)
+            _handle_whatsapp(data, base_url)
         elif obj == "page":
-            _handle_page(data, channels.FACEBOOK)
+            _handle_page(data, channels.FACEBOOK, base_url)
         elif obj == "instagram":
-            _handle_page(data, channels.INSTAGRAM)
+            _handle_page(data, channels.INSTAGRAM, base_url)
         else:
             print(f"Unhandled webhook object type: {obj!r}")
     except Exception as e:
@@ -54,7 +73,7 @@ def receive_webhook(data: dict = Body(default={})):
 
 
 # ── WhatsApp Cloud API ──
-def _handle_whatsapp(data):
+def _handle_whatsapp(data, base_url=""):
     entry   = data.get("entry", [])[0]
     changes = entry.get("changes", [])[0]
     value   = changes.get("value", {})
@@ -82,10 +101,12 @@ def _handle_whatsapp(data):
         print(f"Duplicate ignored: {msg.get('id')}")
         return
 
+    was_voice = False
     if m_type == "audio":
         try:
             media_id     = msg["audio"]["id"]
             incoming_msg = whatsapp.transcribe_audio(owner, media_id)
+            was_voice    = True
             print(f"[{owner['business_name']}] WA {sender} | Voice transcribed: {incoming_msg}")
         except Exception as e:
             print(f"Transcription failed: {e}")
@@ -103,6 +124,8 @@ def _handle_whatsapp(data):
     if reply:
         print(f"Reply: {reply}")
         whatsapp.send_text(owner, sender, reply)
+        if was_voice and base_url:
+            _send_voice_reply(owner, channels.WHATSAPP, sender, reply, base_url)
 
 
 # ── Facebook Messenger + Instagram DM (same event shape) ──
@@ -114,7 +137,7 @@ def _audio_attachment_url(message):
     return None
 
 
-def _handle_page(data, channel):
+def _handle_page(data, channel, base_url=""):
     for entry in data.get("entry", []):
         account_id = str(entry.get("id", ""))
         if channel == channels.FACEBOOK:
@@ -138,12 +161,14 @@ def _handle_page(data, channel):
                 print(f"Duplicate ignored: {message.get('mid')}")
                 continue
 
+            was_voice = False
             text = (message.get("text") or "").strip()
             if not text:
                 audio_url = _audio_attachment_url(message)
                 if audio_url:
                     try:
                         text = whatsapp.transcribe_audio_url(audio_url)
+                        was_voice = True
                         print(f"[{owner['business_name']}] {channel.upper()} {sender} | Voice transcribed: {text}")
                     except Exception as e:
                         print(f"Transcription failed: {e}")
@@ -160,3 +185,5 @@ def _handle_page(data, channel):
             if reply:
                 print(f"Reply: {reply}")
                 channels.send_text(owner, channel, sender, reply)
+                if was_voice and base_url:
+                    _send_voice_reply(owner, channel, sender, reply, base_url)
