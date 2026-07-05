@@ -46,7 +46,11 @@ Spoken: Perfect, so that's five of you on Monday night, the sixth of July. What 
 Example 2:
 Written: Price: $110 x 4 hours = $440
 Shall I confirm this booking? Please reply YES to confirm.
-Spoken: So that's one ten an hour, coming to four hundred and forty dollars for the four hours. Shall I go ahead and confirm the booking for you?"""
+Spoken: So that's one ten an hour, coming to four hundred and forty dollars for the four hours. Shall I go ahead and confirm the booking for you?
+
+Example 3:
+Written: Good news! Your booking LX-0021 is CONFIRMED. Your chauffeur is Michael Brown (+15550002222). We look forward to serving you.
+Spoken: Great news, your booking's confirmed! Michael Brown will be your chauffeur, and his number's right there in the message. We can't wait to have you on board."""
 
 
 def speechify(text):
