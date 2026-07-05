@@ -28,7 +28,11 @@ SPEECH_REWRITE_MODEL = os.getenv("SPEECH_REWRITE_MODEL", "openai/gpt-oss-120b")
 
 SPEECHIFY_PROMPT = """You turn a written chat reply from a limousine booking assistant into what a warm, friendly human agent would SAY out loud in a short WhatsApp voice note.
 
-ALWAYS rewrite fully in your own natural spoken words — never copy the written sentences. But every fact VALUE (vehicle names, dates, times, passenger counts, prices) must stay exactly the same: never recompute, round, or invent a number.
+ALWAYS rewrite fully in your own natural spoken words — never copy the written sentences. Any fact you do mention (vehicle names, dates, times, passenger counts, prices) must stay exactly the same: never recompute, round, or invent a number.
+
+THE VOICE NOTE IS A COMPANION, NOT A NARRATION. The customer also receives the full text. Your job is what a human agent would quickly SAY, not a read-aloud of the message:
+- If the written reply lists several options or a detailed breakdown, do NOT read them all. Summarize like a person would ("I've lined up a few options for you — the Escalade's the sweet spot at two twenty for the two hours — full details in the message") and move to the question.
+- Keep it under 35 words total. Shorter is more human.
 
 Style rules:
 - Warm, casual, human. Use contractions. Vary sentence openings.
@@ -50,24 +54,40 @@ Spoken: So that's one ten an hour, coming to four hundred and forty dollars for 
 
 Example 3:
 Written: Good news! Your booking LX-0021 is CONFIRMED. Your chauffeur is Michael Brown (+15550002222). We look forward to serving you.
-Spoken: Great news, your booking's confirmed! Michael Brown will be your chauffeur, and his number's right there in the message. We can't wait to have you on board."""
+Spoken: Great news, your booking's confirmed! Michael Brown will be your chauffeur, and his number's right there in the message. We can't wait to have you on board.
+
+Example 4:
+Written: For 6 passengers you could choose:
+Cadillac Escalade - capacity 6, $110 x 2 hrs = $220 (minimum 2 hrs)
+GMC Yukon Denali - capacity 6, $100 x 2 hrs = $200 (minimum 2 hrs)
+Lincoln Stretch Limousine - capacity 8, $140 x 3 hrs = $420 (minimum 3 hrs)
+What is the pickup location?
+Spoken: I've got a few great options for the six of you, starting around two hundred dollars — the details are in the message. Where should we pick you up?"""
 
 
 def speechify(text):
     """Rewrite a chat reply into a natural spoken line. Falls back to the
     original text if the rewrite fails."""
+    messages = [
+        {"role": "system", "content": SPEECHIFY_PROMPT},
+        {"role": "user", "content": text},
+    ]
+    # gpt-oss spends hidden reasoning tokens from the same budget — keep the
+    # cap high and reasoning low so the spoken line never gets truncated
     try:
-        resp = groq_client.chat.completions.create(
-            model=SPEECH_REWRITE_MODEL,
-            temperature=0.3,
-            max_tokens=300,
-            messages=[
-                {"role": "system", "content": SPEECHIFY_PROMPT},
-                {"role": "user", "content": text},
-            ],
-        )
+        try:
+            resp = groq_client.chat.completions.create(
+                model=SPEECH_REWRITE_MODEL, temperature=0.3, max_tokens=2048,
+                reasoning_effort="low", messages=messages)
+        except Exception:
+            resp = groq_client.chat.completions.create(
+                model=SPEECH_REWRITE_MODEL, temperature=0.3, max_tokens=2048,
+                messages=messages)
         spoken = (resp.choices[0].message.content or "").strip().strip('"').strip()
-        return spoken or text
+        # A truncated or copied rewrite sounds worse than none — sanity checks
+        if not spoken or spoken == text.strip():
+            return text
+        return spoken
     except Exception as e:
         print(f"Speechify failed, using literal text: {e}")
         return text
