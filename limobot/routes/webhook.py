@@ -20,15 +20,18 @@ def _public_base(request):
 
 
 def _send_voice_reply(owner, channel, recipient, reply, base_url):
-    """Best-effort spoken version of the reply — text has already been sent."""
+    """Speak the full reply as a voice note. Returns True on success so the
+    caller can fall back to text when voice fails."""
     try:
         spoken = tts.speechify(reply)
         print(f"Spoken version: {spoken}")
         clip_id = tts.synthesize(spoken)
         channels.send_voice_clip(owner, channel, recipient, clip_id, base_url)
         print(f"Voice reply sent ({channel})")
+        return True
     except Exception as e:
-        print(f"Voice reply failed (text already delivered): {e}")
+        print(f"Voice reply failed, falling back to text: {e}")
+        return False
 
 
 def _seen(message_id):
@@ -125,9 +128,11 @@ def _handle_whatsapp(data, base_url=""):
     reply = bot.chat(owner, sender, incoming_msg, channel=channels.WHATSAPP)
     if reply:
         print(f"Reply: {reply}")
-        whatsapp.send_text(owner, sender, reply)
-        if was_voice and base_url:
-            _send_voice_reply(owner, channels.WHATSAPP, sender, reply, base_url)
+        # Voice in -> voice-only out (full details spoken); text is the fallback
+        voice_sent = (was_voice and base_url and
+                      _send_voice_reply(owner, channels.WHATSAPP, sender, reply, base_url))
+        if not voice_sent:
+            whatsapp.send_text(owner, sender, reply)
 
 
 # ── Facebook Messenger + Instagram DM (same event shape) ──
@@ -186,6 +191,8 @@ def _handle_page(data, channel, base_url=""):
             reply = bot.chat(owner, sender, text, channel=channel)
             if reply:
                 print(f"Reply: {reply}")
-                channels.send_text(owner, channel, sender, reply)
-                if was_voice and base_url:
-                    _send_voice_reply(owner, channel, sender, reply, base_url)
+                # Voice in -> voice-only out (full details spoken); text is the fallback
+                voice_sent = (was_voice and base_url and
+                              _send_voice_reply(owner, channel, sender, reply, base_url))
+                if not voice_sent:
+                    channels.send_text(owner, channel, sender, reply)
