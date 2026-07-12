@@ -101,14 +101,25 @@ CONVERSATION RULES:
 Stay strictly focused on chauffeur and vehicle bookings for {name} only."""
 
 
+MAX_CONVERSATION_AGE_HOURS = 12
+
+
 def get_history(owner, customer_phone):
     key = (owner["id"], customer_phone)
-    if key not in conversations:
-        conversations[key] = {
+    convo = conversations.get(key)
+    if convo:
+        # Stale conversations carry an outdated "today's date" in the system
+        # prompt and week-old context — start fresh after a long gap
+        age = datetime.now() - datetime.fromisoformat(convo["started_at"])
+        if age.total_seconds() > MAX_CONVERSATION_AGE_HOURS * 3600:
+            convo = None
+    if not convo:
+        convo = {
             "messages":   [SystemMessage(content=build_system_prompt(owner))],
             "started_at": datetime.now().isoformat(),
         }
-    return conversations[key]["messages"]
+        conversations[key] = convo
+    return convo["messages"]
 
 
 def clear_conversations():
