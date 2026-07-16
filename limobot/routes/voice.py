@@ -63,6 +63,8 @@ def voice_booking(request: Request, payload: dict = Body(default={})):
     dropoff_location = (args.get("dropoff_location") or "").strip()
     pickup_time      = (args.get("pickup_time") or "").strip()
     hours            = _to_int(args.get("hours"))
+    days             = _to_int(args.get("days"))
+    return_time      = (args.get("return_time") or "").strip()
     passengers       = _to_int(args.get("passengers"), default=1)
     occasion         = (args.get("occasion") or "").strip()
     total            = _to_int(args.get("total"))
@@ -79,13 +81,14 @@ def voice_booking(request: Request, payload: dict = Body(default={})):
         booking_type=booking_type, pickup_location=pickup_location,
         dropoff_location=dropoff_location, pickup_time=pickup_time,
         hours=hours, passengers=passengers, occasion=occasion, total=total,
-        channel="voice")
+        channel="voice", days=days, return_time=return_time)
     ref = booking_ref(booking_id)
     print(f"[{owner['business_name']}] VOICE BOOKING SAVED: {ref} {name} / {vehicle} / {total}")
 
     booking = {"name": name, "vehicle": vehicle, "booking_type": booking_type,
                "pickup_location": pickup_location, "dropoff_location": dropoff_location,
-               "pickup_time": pickup_time, "hours": hours, "passengers": passengers,
+               "pickup_time": pickup_time, "hours": hours, "days": days,
+               "return_time": return_time, "passengers": passengers,
                "occasion": occasion, "total": total, "phone": customer_phone,
                "channel": "voice"}
 

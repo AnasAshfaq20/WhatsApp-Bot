@@ -53,7 +53,7 @@ check("empty owner form rejected", not r.json()["success"])
 # ==== 3. FLEET MANAGEMENT ====
 r = c.post(f"/admin/owners/{el_id}/vehicles", json={
     "category": "Luxury SUVs", "name": "Lincoln Navigator", "capacity": 6,
-    "hourly_rate": 105, "min_hours": 2, "airport_rate": 145,
+    "hourly_rate": 105, "min_hours": 2, "airport_rate": 145, "daily_rate": 500,
     "description": "Test SUV"})
 check("vehicle added", r.json()["success"], r.json())
 vehicles = c.get(f"/admin/owners/{el_id}/vehicles").json()["vehicles"]
@@ -63,6 +63,7 @@ r = c.put(f"/admin/owners/{el_id}/vehicles/{veh_id}", json={"hourly_rate": 115})
 check("vehicle rate updated", r.json()["success"])
 vehicles = c.get(f"/admin/owners/{el_id}/vehicles").json()["vehicles"]
 check("vehicle update persisted", vehicles[0]["hourly_rate"] == 115)
+check("daily rate stored", vehicles[0]["daily_rate"] == 500)
 
 # ==== 4. NEW OWNER PROMPT BUILDS ====
 el = db.get_owner_by_id(el_id)
@@ -81,12 +82,12 @@ reply2 = bot.chat(lux, "92399TEST", "yes show me the fleet")
 check("[SEND_FLEET] tag stripped from reply", "[SEND_FLEET]" not in (reply2 or ""))
 
 reply3 = bot.chat(lux, "92399TEST",
-                  "I need an SUV for 5 people this Saturday 7pm, pickup at Grand Hotel, "
+                  "I need a car for 5 people this Saturday 7pm, pickup at Grand Hotel, "
                   "4 hours for a night out")
-check("quote includes a price", "$" in reply3, reply3)
+check("quote includes a price in owner currency", (lux.get("currency") or "$") in reply3, reply3)
 
 before = len(db.get_bookings_for_owner(lux_id))
-bot.chat(lux, "92399TEST", "My name is Test Bilal, let's go with the Escalade")
+bot.chat(lux, "92399TEST", "My name is Test Bilal, let's go with the V-Class")
 # explicit confirmation now required
 reply5 = bot.chat(lux, "92399TEST", "yes please confirm the booking")
 bookings = db.get_bookings_for_owner(lux_id)
@@ -105,6 +106,23 @@ confs = [s for s in sent if s[0] == "text" and "BOOKING CONFIRMED" in s[3]]
 check("confirmation sent to customer", any(s[2] == "92399TEST" for s in confs))
 admin_alerts = [s for s in sent if s[0] == "text" and "NEW BOOKING RECEIVED" in s[3]]
 check("owner admin alerted", any(s[2] == lux["admin_phone"] for s in admin_alerts))
+
+# ==== 5b. DAILY-HIRE CONFIRMATION + DEPOSIT FORMAT ====
+dep_owner = dict(lux)
+dep_owner["deposit_amount"] = 50
+dep_owner["payment_link"] = "https://pay.example/x"
+conf = bot.format_confirmation(dep_owner, {
+    "name": "T", "vehicle": "Black Limo 8-Seater", "booking_type": "daily",
+    "pickup_location": "SW1A 1AA", "dropoff_location": "Manchester",
+    "pickup_time": "Mon 10 Aug, 9:00 AM", "return_time": "Thu 13 Aug, 6:00 PM",
+    "days": 3, "passengers": 8, "total": 1200}, "LX-0001")
+check("daily confirmation shows days and return",
+      "3 days" in conf and "Return: Thu 13 Aug, 6:00 PM" in conf, conf)
+check("deposit and payment link in confirmation",
+      "50 deposit" in conf and "https://pay.example/x" in conf, conf)
+conf2 = bot.format_confirmation(lux, {"name": "T", "vehicle": "V", "booking_type": "hourly",
+    "pickup_location": "A", "pickup_time": "Mon", "hours": 2, "passengers": 2, "total": 140}, "LX-0002")
+check("no deposit line when deposit is 0", "deposit" not in conf2.lower(), conf2)
 
 # ==== 6. TENANT ISOLATION ====
 check("conversations keyed per owner",

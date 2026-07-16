@@ -131,6 +131,7 @@ def create_vehicle(owner_id: int, payload: dict = Body(default={}),
             hourly_rate  = int(payload.get("hourly_rate") or 0),
             min_hours    = int(payload.get("min_hours") or 2),
             airport_rate = int(payload.get("airport_rate") or 0),
+            daily_rate   = int(payload.get("daily_rate") or 0),
             description  = payload.get("description", ""),
         )
     except (TypeError, ValueError):
@@ -141,7 +142,7 @@ def create_vehicle(owner_id: int, payload: dict = Body(default={}),
 @router.put("/admin/owners/{owner_id}/vehicles/{vehicle_id}")
 def edit_vehicle(owner_id: int, vehicle_id: int, payload: dict = Body(default={}),
                  session: dict = Depends(require_admin)):
-    for key in ("capacity", "hourly_rate", "min_hours", "airport_rate"):
+    for key in ("capacity", "hourly_rate", "min_hours", "airport_rate", "daily_rate"):
         if key in payload:
             try:
                 payload[key] = int(payload[key])

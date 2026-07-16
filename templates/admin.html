@@ -284,7 +284,9 @@
       <div class="field"><label>Dispatcher Alert Phone</label><input id="f-admin_phone" placeholder="15550001111"></div>
       <div class="field full"><label>Base Location</label><input id="f-location" placeholder="Head office / garage address"></div>
       <div class="field"><label>Service Area</label><input id="f-service_area" placeholder="City-wide + airport transfers"></div>
-      <div class="field"><label>Currency Symbol</label><input id="f-currency" placeholder="$"></div>
+      <div class="field"><label>Currency Symbol</label><input id="f-currency" placeholder="£"></div>
+      <div class="field"><label>Booking Deposit (0 = none)</label><input id="f-deposit_amount" type="number" placeholder="50"></div>
+      <div class="field full"><label>Payment Link (shown with the deposit request)</label><input id="f-payment_link" placeholder="https://buy.stripe.com/..."></div>
       <div class="field full"><label>WhatsApp Token</label><input id="f-whatsapp_token" placeholder="EAAxxxx..."></div>
       <div class="field"><label>WhatsApp Phone ID</label><input id="f-whatsapp_phone_id" placeholder="1132931713234299"></div>
       <div class="field full"><label>Voice Agent Number (the number customers call)</label><input id="f-voice_phone" placeholder="+1 555 000 1111"></div>
@@ -315,7 +317,7 @@
       <thead>
         <tr>
           <th>Category</th><th>Vehicle</th><th>Seats</th><th>Hourly</th>
-          <th>Min Hrs</th><th>Airport</th><th>Status</th><th></th>
+          <th>Min Hrs</th><th>Airport</th><th>Daily</th><th>Status</th><th></th>
         </tr>
       </thead>
       <tbody id="fleet-body"></tbody>
@@ -330,6 +332,7 @@
       <div class="field"><label>Hourly Rate</label><input id="v-hourly_rate" type="number" placeholder="110"></div>
       <div class="field"><label>Minimum Hours</label><input id="v-min_hours" type="number" placeholder="2"></div>
       <div class="field"><label>Airport Transfer Flat Rate (0 = not offered)</label><input id="v-airport_rate" type="number" placeholder="150"></div>
+      <div class="field"><label>Daily Hire Rate (0 = not offered)</label><input id="v-daily_rate" type="number" placeholder="400"></div>
       <div class="field full"><label>Description (shown to customers by the bot)</label><input id="v-description" placeholder="Leather interior, WiFi, luggage space..."></div>
     </div>
     <div class="error-msg" id="fleet-error"></div>
@@ -363,7 +366,7 @@
   const FIELDS = ['username','owner_name','business_name','hours','admin_phone',
                   'location','service_area','currency','whatsapp_token',
                   'whatsapp_phone_id','voice_phone','fb_page_id','fb_page_token',
-                  'ig_account_id','ig_token'];
+                  'ig_account_id','ig_token','deposit_amount','payment_link'];
 
   async function fetchOwners() {
     const r = await fetch('/admin/owners');
@@ -508,7 +511,7 @@
   }
 
   // ── Fleet management ──
-  const V_FIELDS = ['category','name','capacity','hourly_rate','min_hours','airport_rate','description'];
+  const V_FIELDS = ['category','name','capacity','hourly_rate','min_hours','airport_rate','daily_rate','description'];
 
   async function openFleet(ownerId, businessName) {
     fleetOwnerId = ownerId;
@@ -540,6 +543,7 @@
         <td>${v.hourly_rate}/hr</td>
         <td>${v.min_hours}</td>
         <td>${v.airport_rate ? v.airport_rate : '—'}</td>
+        <td>${v.daily_rate ? v.daily_rate + '/day' : '—'}</td>
         <td><span class="badge ${v.available ? 'badge-active' : 'badge-inactive'}">${v.available ? 'Available' : 'Hidden'}</span></td>
         <td style="white-space:nowrap;">
           <button class="btn btn-primary btn-sm" onclick='editVehicle(${JSON.stringify(v)})'>Edit</button>
@@ -580,6 +584,7 @@
     data.hourly_rate  = data.hourly_rate || 0;
     data.min_hours    = data.min_hours || 2;
     data.airport_rate = data.airport_rate || 0;
+    data.daily_rate   = data.daily_rate || 0;
 
     const url = editingVehicleId
       ? `/admin/owners/${fleetOwnerId}/vehicles/${editingVehicleId}`

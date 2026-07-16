@@ -527,12 +527,15 @@
       const isNew   = !knownIds.has(b.timestamp);
       const status  = b.status || 'pending';
       const isTransfer = b.booking_type === 'transfer';
+      const isDaily    = b.booking_type === 'daily';
 
       const routeHtml = `
         <div class="route-box">
           From: ${b.pickup_location}
           ${b.dropoff_location ? `<br>To: ${b.dropoff_location}` : ''}
-          ${!isTransfer && b.hours ? `<br>Duration: ${b.hours} hour${b.hours > 1 ? 's' : ''}` : ''}
+          ${isDaily && b.return_time ? `<br>Return: ${b.return_time}` : ''}
+          ${isDaily && b.days ? `<br>Duration: ${b.days} day${b.days > 1 ? 's' : ''}` : ''}
+          ${!isDaily && !isTransfer && b.hours ? `<br>Duration: ${b.hours} hour${b.hours > 1 ? 's' : ''}` : ''}
         </div>`;
 
       const driverHtml = b.driver_name
@@ -569,7 +572,7 @@
             </div>
             <div class="vehicle-row">
               <span>🚘 ${b.vehicle}</span>
-              <span class="type-chip">${isTransfer ? 'Transfer' : 'Hourly'}</span>
+              <span class="type-chip">${isTransfer ? 'Transfer' : isDaily ? 'Daily Hire' : 'Hourly'}</span>
             </div>
             <div class="pickup-row">🕑 Pickup: ${b.pickup_time}</div>
             ${routeHtml}

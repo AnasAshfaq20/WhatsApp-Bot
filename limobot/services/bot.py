@@ -43,11 +43,13 @@ FLEET (use these exact rates — never invent prices or vehicles):
 {fleet_text}
 
 PRICING RULES:
-- Two booking types: "hourly" (chauffeur by the hour) and "transfer" (flat-rate one-way AIRPORT pickup/drop-off).
+- Three booking types: "hourly" (chauffeur by the hour), "transfer" (flat-rate one-way AIRPORT pickup/drop-off) and "daily" (hire by the day, with a return date).
 - Hourly: total = hourly_rate x hours. Each vehicle has min_hours — never quote fewer hours than that; tell the customer the minimum if they ask for less.
 - Airport transfer: use the vehicle's airport_rate as the flat price. If airport_rate is null, that vehicle is not offered for transfers — suggest one that is.
+- Daily hire: total = daily_rate x days. Count days from pickup date to return date (a same-day hire is 1 day; partial days round up). If daily_rate is null that vehicle is not offered for daily hire.
+- Choose the booking type from what the customer wants: "hire a car for the weekend / until Sunday" is daily; "pick me up from Heathrow" is a transfer; "for the evening / 4 hours" is hourly.
 - One-way trips that do NOT involve an airport (e.g. hotel to venue, house to another area) are booked as "hourly" at the vehicle's minimum hours. Say it simply, e.g. "One-way trips within the city are covered by our {cur}85 x 2 hours minimum = {cur}170 package" — do not ask how many hours for a simple one-way drop unless they want the car to wait.
-- Always show the price breakdown before asking for confirmation, e.g. "{cur}110 x 4 hours = {cur}440".
+- Always show the price breakdown before asking for confirmation, e.g. "{cur}110 x 4 hours = {cur}440" or "{cur}400 x 3 days = {cur}1200".
 
 GREETING — FIRST MESSAGE ONLY:
 - When the customer opens with just a greeting (hi, hello, salam, hey...), do NOT ask for booking details yet. Reply warmly and like a human, in this shape:
@@ -67,8 +69,8 @@ RESPOND INTELLIGENTLY, NOT LIKE A FORM:
 BOOKING DETAILS TO COLLECT (skip anything already known):
 1. Occasion / trip type — only if not already clear from the conversation
 2. Pickup date and time
-3. Pickup location
-4. Drop-off location (for transfers) OR number of hours (for hourly bookings)
+3. Pickup location (address or postcode)
+4. Depending on the type: drop-off location (transfers) / number of hours (hourly) / return date and drop-off location (daily hire)
 5. Number of passengers — then recommend the best-fitting vehicles with prices. Never book a vehicle with capacity below the passenger count.
 6. Customer's full name — ask only at the end, right before confirmation.
 
@@ -86,8 +88,8 @@ CONVERSATION RULES:
 6. ONLY after the customer has explicitly confirmed in rule 5, end your reply with this exact tag on its own line:
    [BOOKING_CONFIRMED]
    Followed by a JSON block like:
-   {{"name": "John Smith", "vehicle": "Cadillac Escalade", "booking_type": "hourly", "pickup_location": "...", "dropoff_location": "...", "pickup_time": "Saturday 15 Mar 2026, 7:00 PM", "hours": 4, "passengers": 6, "occasion": "night out", "total": 440}}
-   For transfers set "hours" to 0 and always fill "dropoff_location". Never output [BOOKING_CONFIRMED] in the same message where you ask for confirmation.
+   {{"name": "John Smith", "vehicle": "Black Limo 8-Seater", "booking_type": "hourly", "pickup_location": "...", "dropoff_location": "...", "pickup_time": "Saturday 15 Mar 2026, 7:00 PM", "hours": 4, "days": 0, "return_time": "", "passengers": 6, "occasion": "night out", "total": 440}}
+   For transfers set "hours" to 0 and always fill "dropoff_location". For daily hire set "hours" to 0 and fill "days" and "return_time" (e.g. "Sunday 17 Mar 2026, 6:00 PM"). Never output [BOOKING_CONFIRMED] in the same message where you ask for confirmation.
 7. If the customer asks for a vehicle you do not have, say it is unavailable and suggest the closest match from the fleet.
 8. Currency: show prices as "{cur}440" format.
 9. If the user sends rude, abusive, or offensive messages, respond with exactly: "Sorry, I can only assist with vehicle bookings. Please keep the conversation respectful."
@@ -169,9 +171,13 @@ def chat(owner, customer_phone, incoming_msg, channel="whatsapp"):
     return reply
 
 
+SERVICE_LABELS = {"transfer": "Flat-rate transfer", "daily": "Daily hire",
+                  "hourly": "Hourly charter"}
+
+
 def format_confirmation(owner, booking, ref):
     cur = owner.get("currency") or "$"
-    is_transfer = booking.get("booking_type") == "transfer"
+    btype = booking.get("booking_type", "hourly")
     lines = [
         "BOOKING CONFIRMED",
         "=" * 28,
@@ -180,19 +186,32 @@ def format_confirmation(owner, booking, ref):
         f"Customer: {booking.get('name', 'Guest')}",
         "-" * 28,
         f"Vehicle: {booking.get('vehicle', '')}",
-        f"Service: {'Flat-rate transfer' if is_transfer else 'Hourly charter'}",
+        f"Service: {SERVICE_LABELS.get(btype, 'Hourly charter')}",
         f"Pickup: {booking.get('pickup_time', '')}",
         f"From: {booking.get('pickup_location', '')}",
     ]
     if booking.get("dropoff_location"):
         lines.append(f"To: {booking['dropoff_location']}")
-    if not is_transfer and booking.get("hours"):
+    if btype == "daily":
+        if booking.get("return_time"):
+            lines.append(f"Return: {booking['return_time']}")
+        if booking.get("days"):
+            lines.append(f"Duration: {booking['days']} day{'s' if booking['days'] > 1 else ''}")
+    elif btype != "transfer" and booking.get("hours"):
         lines.append(f"Duration: {booking['hours']} hours")
     lines += [
         f"Passengers: {booking.get('passengers', 1)}",
         "-" * 28,
         f"TOTAL: {cur}{booking['total']}",
         "=" * 28,
+    ]
+    deposit = owner.get("deposit_amount") or 0
+    if deposit:
+        lines.append(f"A {cur}{deposit} deposit is required to secure the vehicle.")
+        if owner.get("payment_link"):
+            lines.append(f"Payment link: {owner['payment_link']}")
+        lines.append("-" * 28)
+    lines += [
         "Your chauffeur's details will be shared before pickup.",
         f"Thank you for choosing {owner['business_name']}!",
     ]
@@ -217,7 +236,8 @@ def notify_owner(owner, booking, ref):
         f"Pickup: {booking.get('pickup_time', '')}",
         f"From: {booking.get('pickup_location', '')}",
         f"To: {booking.get('dropoff_location', '') or 'N/A'}",
-        f"Hours: {booking.get('hours') or 'N/A'}",
+        f"Return: {booking.get('return_time', '') or 'N/A'}",
+        f"Duration: {str(booking.get('days')) + ' days' if booking.get('days') else str(booking.get('hours') or 'N/A') + ' hours' if booking.get('hours') else 'N/A'}",
         f"Passengers: {booking.get('passengers', 1)}",
         "-" * 28,
         f"TOTAL: {cur}{booking['total']}",
@@ -254,6 +274,8 @@ def _extract_and_log_booking(owner, reply_text, customer_phone, channel="whatsap
             occasion         = booking.get("occasion", ""),
             total            = int(booking.get("total") or 0),
             channel          = channel,
+            days             = int(booking.get("days") or 0),
+            return_time      = booking.get("return_time", ""),
         )
         ref = booking_ref(booking_id)
         print(f"BOOKING SAVED TO DB: {ref} {booking}")

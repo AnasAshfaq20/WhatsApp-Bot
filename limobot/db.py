@@ -78,6 +78,10 @@ def init_db():
     c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS ig_token TEXT DEFAULT ''")
     c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS ig_app_id TEXT DEFAULT ''")
 
+    # Booking deposit shown in confirmations (0 = no deposit required)
+    c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS deposit_amount INTEGER DEFAULT 0")
+    c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS payment_link TEXT DEFAULT ''")
+
     c.execute("""
         CREATE TABLE IF NOT EXISTS vehicles (
             id           SERIAL PRIMARY KEY,
@@ -92,6 +96,8 @@ def init_db():
             available    BOOLEAN DEFAULT TRUE
         )
     """)
+    # Per-day hire rate (0 = not offered for daily hire)
+    c.execute("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS daily_rate INTEGER DEFAULT 0")
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS bookings (
@@ -116,6 +122,9 @@ def init_db():
     """)
     # Where the booking came from: whatsapp, facebook, instagram, voice
     c.execute("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS channel TEXT DEFAULT 'whatsapp'")
+    # Daily-hire bookings: number of days and the return date/time
+    c.execute("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS days INTEGER DEFAULT 0")
+    c.execute("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS return_time TEXT DEFAULT ''")
 
     conn.commit()
 
@@ -178,10 +187,11 @@ def _seed_fleet_from_json(cursor, owner_id):
         for v in vehicles:
             cursor.execute(
                 """INSERT INTO vehicles (owner_id, category, name, capacity, hourly_rate,
-                                         min_hours, airport_rate, description)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                                         min_hours, airport_rate, daily_rate, description)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (owner_id, category, v["name"], v["capacity"], v["hourly_rate"],
-                 v.get("min_hours", 2), v.get("airport_rate", 0), v.get("desc", "")),
+                 v.get("min_hours", 2), v.get("airport_rate", 0),
+                 v.get("daily_rate", 0), v.get("desc", "")),
             )
 
 
@@ -218,7 +228,8 @@ def update_owner(owner_id, fields):
     allowed = {"owner_name", "business_name", "hours", "location", "service_area",
                "whatsapp_token", "whatsapp_phone_id", "admin_phone", "currency",
                "fleet_image_url", "voice_phone", "active", "username",
-               "fb_page_id", "fb_page_token", "ig_account_id", "ig_token", "ig_app_id"}
+               "fb_page_id", "fb_page_token", "ig_account_id", "ig_token", "ig_app_id",
+               "deposit_amount", "payment_link"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if "password" in fields and fields["password"]:
         updates["password_hash"] = generate_password_hash(fields["password"])
@@ -248,7 +259,8 @@ def delete_owner(owner_id):
 OWNER_COLS = ("id, username, password_hash, owner_name, business_name, hours, "
               "location, service_area, currency, whatsapp_token, whatsapp_phone_id, "
               "admin_phone, fleet_image_url, voice_phone, active, created_at, "
-              "fb_page_id, fb_page_token, ig_account_id, ig_token, ig_app_id")
+              "fb_page_id, fb_page_token, ig_account_id, ig_token, ig_app_id, "
+              "deposit_amount, payment_link")
 
 
 def get_owner_by_id(owner_id):
@@ -385,15 +397,15 @@ def get_vehicles_for_owner(owner_id, only_available=False):
 
 
 def add_vehicle(owner_id, category, name, capacity, hourly_rate, min_hours,
-                airport_rate, description=""):
+                airport_rate, description="", daily_rate=0):
     conn = get_db()
     c = conn.cursor()
     c.execute(
         """INSERT INTO vehicles (owner_id, category, name, capacity, hourly_rate,
-                                 min_hours, airport_rate, description)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                                 min_hours, airport_rate, daily_rate, description)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
         (owner_id, category, name, capacity, hourly_rate, min_hours,
-         airport_rate, description),
+         airport_rate, daily_rate, description),
     )
     vehicle_id = c.fetchone()[0]
     conn.commit()
@@ -404,7 +416,7 @@ def add_vehicle(owner_id, category, name, capacity, hourly_rate, min_hours,
 def update_vehicle(vehicle_id, owner_id, fields):
     """Update a vehicle, scoped to its owner so tenants can't touch others' fleets."""
     allowed = {"category", "name", "capacity", "hourly_rate", "min_hours",
-               "airport_rate", "description", "available"}
+               "airport_rate", "daily_rate", "description", "available"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return
@@ -438,6 +450,7 @@ def get_fleet_dict(owner):
             "hourly_rate":  v["hourly_rate"],
             "min_hours":    v["min_hours"],
             "airport_rate": v["airport_rate"] or None,
+            "daily_rate":   v.get("daily_rate") or None,
             "desc":         v["description"],
         })
 
@@ -456,19 +469,20 @@ def get_fleet_dict(owner):
 # ──────────────────────────────────────────────
 def save_booking(owner_id, phone, name, vehicle, booking_type, pickup_location,
                  dropoff_location, pickup_time, hours, passengers, occasion, total,
-                 channel="whatsapp"):
+                 channel="whatsapp", days=0, return_time=""):
     conn = get_db()
     c = conn.cursor()
     c.execute(
         """INSERT INTO bookings (owner_id, phone, name, vehicle, booking_type,
                                  pickup_location, dropoff_location, pickup_time,
                                  hours, passengers, occasion, total, status, channel,
-                                 created_at)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s, %s)
+                                 days, return_time, created_at)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s, %s,
+                   %s, %s)
            RETURNING id""",
         (owner_id, phone, name, vehicle, booking_type, pickup_location,
          dropoff_location, pickup_time, hours, passengers, occasion, total,
-         channel, now_utc().isoformat()),
+         channel, days, return_time, now_utc().isoformat()),
     )
     booking_id = c.fetchone()[0]
     conn.commit()
