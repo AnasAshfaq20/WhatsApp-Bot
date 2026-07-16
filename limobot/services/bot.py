@@ -1,6 +1,6 @@
 """Conversation engine: system prompt, LLM, booking extraction, notifications."""
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
@@ -20,10 +20,17 @@ def build_system_prompt(owner):
     fleet_text = json.dumps(fleet, indent=2)
     name       = fleet["business_name"]
     cur        = fleet["currency"]
-    today      = now_pkt().strftime("%A, %d %B %Y")
+    now        = now_pkt()
+    today      = now.strftime("%A, %d %B %Y")
+    # LLMs are unreliable at weekday arithmetic — give them a lookup table
+    calendar   = "\n".join(
+        (now + timedelta(days=i)).strftime("- %A %d %B %Y") for i in range(15))
     return f"""You are the professional WhatsApp booking assistant for "{name}", a chauffeured limousine and luxury car rental service.
 
-TODAY'S DATE: {today}. Use it to resolve dates like "tomorrow" or "this Saturday" into an exact date.
+TODAY'S DATE: {today}.
+
+CALENDAR — the next two weeks (use ONLY this table to resolve dates like "tomorrow", "this Friday" or "next Monday"; never guess a weekday):
+{calendar}
 
 YOUR JOB:
 - Greet customers warmly and professionally
