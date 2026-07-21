@@ -2,59 +2,13 @@ from fastapi import APIRouter, Request, Body
 from fastapi.responses import PlainTextResponse
 
 from .. import config
-from ..db import (get_owner_by_phone_id, get_owner_by_fb_page, get_owner_by_ig_account,
-                  get_owner_by_id, get_all_owners)
+from ..db import get_owner_by_phone_id, get_owner_by_fb_page, get_owner_by_ig_account
 from ..services import bot, whatsapp, channels, tts
 
 router = APIRouter()
 
 # Deduplication — Meta sometimes retries webhooks
 processed_message_ids = set()
-
-# Demo feature: lets one WhatsApp number serve several tenants. A customer
-# texts "switch to <business>" and their chat is re-pointed at that tenant's
-# brain (fleet, prices, bookings) while sends still use the real number.
-tenant_overrides = {}  # sender -> owner_id
-
-
-def _handle_switch_command(owner, sender, text):
-    """Returns True if the message was a demo switch command (already answered)."""
-    lowered = text.lower().strip()
-    if not lowered.startswith("switch to "):
-        return False
-    target = lowered[len("switch to "):].strip()
-    match = None
-    for o in get_all_owners():
-        if not o["active"]:
-            continue
-        if target == o["username"].lower() or target in o["business_name"].lower():
-            match = o
-            break
-    if match:
-        tenant_overrides[sender] = match["id"]
-        bot.conversations.pop((match["id"], sender), None)  # fresh start
-        whatsapp.send_text(owner, sender,
-            f"Demo switch: you are now chatting with {match['business_name']}. Say hi to begin!")
-    else:
-        names = ", ".join(o["business_name"] for o in get_all_owners() if o["active"])
-        whatsapp.send_text(owner, sender,
-            f"No business matched '{target}'. Available: {names}")
-    return True
-
-
-def _apply_override(owner, sender):
-    """Swap in the overridden tenant's identity, keeping the real number's
-    sending credentials."""
-    override_id = tenant_overrides.get(sender)
-    if not override_id or override_id == owner["id"]:
-        return owner
-    tenant = get_owner_by_id(override_id)
-    if not tenant or not tenant.get("active"):
-        tenant_overrides.pop(sender, None)
-        return owner
-    return {**tenant,
-            "whatsapp_token": owner["whatsapp_token"],
-            "whatsapp_phone_id": owner["whatsapp_phone_id"]}
 
 
 def _public_base(request):
@@ -167,13 +121,10 @@ def _handle_whatsapp(data, base_url=""):
     elif m_type == "text":
         incoming_msg = msg["text"]["body"].strip()
         print(f"[{owner['business_name']}] WA {sender} | Msg: {incoming_msg}")
-        if _handle_switch_command(owner, sender, incoming_msg):
-            return
     else:
         whatsapp.send_text(owner, sender, "Sorry, I can only handle text and voice messages.")
         return
 
-    owner = _apply_override(owner, sender)
     reply = bot.chat(owner, sender, incoming_msg, channel=channels.WHATSAPP)
     if reply:
         print(f"Reply: {reply}")
