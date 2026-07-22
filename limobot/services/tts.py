@@ -23,9 +23,10 @@ TTS_VOICE = os.getenv("TTS_VOICE", "hannah")
 # recommend no direction for the most natural customer-support cadence.
 TTS_STYLE = os.getenv("TTS_STYLE", "")
 
-# Model for rewriting chat text into natural spoken lines. Facts (prices,
-# dates) must survive the rewrite, so use the main model, not a small one.
-SPEECH_REWRITE_MODEL = os.getenv("SPEECH_REWRITE_MODEL", "openai/gpt-oss-120b")
+# Model for rewriting chat text into natural spoken lines. Runs on a separate
+# free-quota pool from the main chat model; 70B keeps facts/prices intact
+# (the 8B model corrupted them in testing — do not go smaller).
+SPEECH_REWRITE_MODEL = os.getenv("SPEECH_REWRITE_MODEL", "llama-3.3-70b-versatile")
 
 SPEECHIFY_PROMPT = """You are the VOICE of a limousine booking assistant. Turn the written chat reply into exactly what a warm, natural human agent would SAY out loud in a WhatsApp voice note.
 

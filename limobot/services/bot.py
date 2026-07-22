@@ -12,21 +12,35 @@ from ..config import now_pkt
 from . import whatsapp, channels
 
 llm = ChatGroq(model="openai/gpt-oss-120b", temperature=0.2)
-# Separate quota pool on Groq — rescues conversations when the primary model
+# Separate quota pools on Groq — rescue conversations when the primary model
 # hits its rate limit (429), which otherwise silently killed replies
 fallback_llm = ChatGroq(model=os.getenv("FALLBACK_MODEL", "llama-3.3-70b-versatile"),
                         temperature=0.2)
+# Last resort: the 8B model has by far the largest free-tier quota
+emergency_llm = ChatGroq(model=os.getenv("EMERGENCY_MODEL", "llama-3.1-8b-instant"),
+                         temperature=0.2)
+
+# Free-tier friendliness: only the system prompt + the most recent turns are
+# sent to the model. Long chats otherwise resend everything each message.
+MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "12"))
+
+
+def _context_window(history):
+    if len(history) <= MAX_HISTORY_MESSAGES + 1:
+        return history
+    return [history[0]] + history[-MAX_HISTORY_MESSAGES:]
 
 
 def _invoke(history):
     """LLM call that survives rate limits: retry primary once, then fall back
-    to the secondary model. Raises only if everything fails."""
+    through the secondary and emergency models. Raises only if everything fails."""
+    window = _context_window(history)
     last_err = None
-    for attempt, model in enumerate((llm, llm, fallback_llm), start=1):
+    for attempt, model in enumerate((llm, llm, fallback_llm, emergency_llm), start=1):
         try:
             if attempt == 2:
                 time.sleep(2)
-            reply = model.invoke(history).content
+            reply = model.invoke(window).content
             if reply and reply.strip():
                 return reply
             last_err = ValueError("empty LLM reply")
