@@ -131,6 +131,21 @@ def init_db():
     c.execute("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS days INTEGER DEFAULT 0")
     c.execute("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS return_time TEXT DEFAULT ''")
 
+    # Persistent chat history — conversations survive restarts and days,
+    # WhatsApp-thread style
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id         SERIAL PRIMARY KEY,
+            owner_id   INTEGER NOT NULL,
+            phone      TEXT    NOT NULL,
+            role       TEXT    NOT NULL,
+            content    TEXT    NOT NULL,
+            created_at TEXT    NOT NULL
+        )
+    """)
+    c.execute("""CREATE INDEX IF NOT EXISTS idx_chat_messages_thread
+                 ON chat_messages (owner_id, phone, id)""")
+
     conn.commit()
 
     default_owner_id = _ensure_default_owner(conn)
@@ -534,6 +549,47 @@ def update_booking_status_db(booking_id, new_status, owner_id=None,
     row = c.fetchone()
     conn.close()
     return _booking_row_to_dict(row) if row else None
+
+
+# ──────────────────────────────────────────────
+# CHAT HISTORY (persistent conversations)
+# ──────────────────────────────────────────────
+def save_chat_message(owner_id, phone, role, content):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        """INSERT INTO chat_messages (owner_id, phone, role, content, created_at)
+           VALUES (%s, %s, %s, %s, %s)""",
+        (owner_id, phone, role, content, now_utc().isoformat()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_chat_history(owner_id, phone, limit=12):
+    """Last `limit` messages of the thread, oldest first."""
+    conn = get_db()
+    c = dict_cursor(conn)
+    c.execute(
+        """SELECT role, content FROM chat_messages
+           WHERE owner_id = %s AND phone = %s
+           ORDER BY id DESC LIMIT %s""",
+        (owner_id, phone, limit),
+    )
+    rows = c.fetchall()
+    conn.close()
+    return [dict(r) for r in reversed(rows)]
+
+
+def clear_chat_history(owner_id=None):
+    conn = get_db()
+    c = conn.cursor()
+    if owner_id is None:
+        c.execute("DELETE FROM chat_messages")
+    else:
+        c.execute("DELETE FROM chat_messages WHERE owner_id = %s", (owner_id,))
+    conn.commit()
+    conn.close()
 
 
 def _booking_row_to_dict(row):

@@ -7,7 +7,8 @@ from datetime import datetime, timedelta
 from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
-from ..db import get_fleet_dict, save_booking, booking_ref
+from ..db import (get_fleet_dict, save_booking, booking_ref,
+                  save_chat_message, get_chat_history, clear_chat_history)
 from ..config import now_pkt
 from . import whatsapp, channels
 
@@ -198,29 +199,24 @@ CONVERSATION RULES:
 Stay strictly focused on chauffeur and vehicle bookings for {name} only."""
 
 
-MAX_CONVERSATION_AGE_HOURS = 12
-
-
-def get_history(owner, customer_phone):
-    key = (owner["id"], customer_phone)
-    convo = conversations.get(key)
-    if convo:
-        # Stale conversations carry an outdated "today's date" in the system
-        # prompt and week-old context — start fresh after a long gap
-        age = datetime.now() - datetime.fromisoformat(convo["started_at"])
-        if age.total_seconds() > MAX_CONVERSATION_AGE_HOURS * 3600:
-            convo = None
-    if not convo:
-        convo = {
-            "messages":   [SystemMessage(content=build_system_prompt(owner))],
-            "started_at": datetime.now().isoformat(),
-        }
-        conversations[key] = convo
-    return convo["messages"]
+def load_thread(owner, customer_phone):
+    """Persistent WhatsApp-style thread: a fresh system prompt (current date,
+    current fleet/knowledge) plus the stored recent conversation from the DB.
+    Survives restarts and multi-day gaps."""
+    messages = [SystemMessage(content=build_system_prompt(owner))]
+    for row in get_chat_history(owner["id"], customer_phone,
+                                limit=MAX_HISTORY_MESSAGES):
+        cls = HumanMessage if row["role"] == "human" else AIMessage
+        messages.append(cls(content=row["content"]))
+    return messages
 
 
 def clear_conversations():
     conversations.clear()
+    try:
+        clear_chat_history()
+    except Exception as e:
+        print(f"clear_chat_history failed: {e}")
 
 
 def _enforce_single_question(reply):
@@ -238,13 +234,12 @@ def chat(owner, customer_phone, incoming_msg, channel="whatsapp"):
     customer_phone is the sender id on the channel: a phone number on WhatsApp,
     a PSID on Messenger, an IGSID on Instagram.
     """
-    history = get_history(owner, customer_phone)
+    history = load_thread(owner, customer_phone)
     history.append(HumanMessage(content=incoming_msg))
 
     reply = _invoke(history)
     if "[BOOKING_CONFIRMED]" not in reply and "[SEND_FLEET]" not in reply:
         reply = _enforce_single_question(reply)
-    history.append(AIMessage(content=reply))
 
     # Fleet card request
     if "[SEND_FLEET]" in reply:
@@ -254,14 +249,23 @@ def chat(owner, customer_phone, incoming_msg, channel="whatsapp"):
             reply = reply.replace("[SEND_FLEET]", "").strip()
         else:
             # No image configured — let the LLM list the fleet in text instead
+            history.append(AIMessage(content=reply))
             history.append(HumanMessage(
                 content="(No fleet image is available. List the fleet in plain text: "
                         "vehicle, capacity and hourly rate per category. "
                         "Do not output the [SEND_FLEET] tag.)"))
             reply = _invoke(history).replace("[SEND_FLEET]", "").strip()
-            history.append(AIMessage(content=reply))
 
     reply = _extract_and_log_booking(owner, reply, customer_phone, channel)
+
+    # Persist the turn — what the customer sent, and what they actually saw
+    try:
+        save_chat_message(owner["id"], customer_phone, "human", incoming_msg)
+        save_chat_message(owner["id"], customer_phone, "ai",
+                          reply or "(confirmation receipt sent)")
+    except Exception as e:
+        print(f"chat persistence failed: {e}")
+
     return reply
 
 

@@ -162,7 +162,10 @@ conn.close()
 
 # ==== 6. TENANT ISOLATION ====
 check("conversations keyed per owner",
-      (lux_id, "92399TEST") in bot.conversations and (el_id, "92399TEST") not in bot.conversations)
+      len(db.get_chat_history(lux_id, "92399TEST")) > 0
+      and len(db.get_chat_history(el_id, "92399TEST")) == 0)
+check("conversation survives restart (persisted to DB)",
+      any("Bilal" in m["content"] for m in db.get_chat_history(lux_id, "92399TEST", limit=50)))
 check("2nd owner has zero bookings", len(db.get_bookings_for_owner(el_id)) == 0)
 
 o = db.get_owner_by_phone_id("5550001111")
@@ -250,7 +253,8 @@ check("instagram webhook 200", r.status_code == 200)
 check("instagram reply sent via page API",
       any(s[0] == "page" and s[2] == "IGSID456" for s in sent), sent)
 check("channel conversations isolated",
-      (el_id, "PSID123") in bot.conversations and (el_id, "IGSID456") in bot.conversations)
+      len(db.get_chat_history(el_id, "PSID123")) > 0
+      and len(db.get_chat_history(el_id, "IGSID456")) > 0)
 
 # ==== 11. WEBHOOK VERIFY (GET) ====
 r = c.get("/webhook", params={"hub.mode": "subscribe",
