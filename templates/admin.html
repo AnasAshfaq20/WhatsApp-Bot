@@ -388,12 +388,13 @@
   }
 
   function renderOwners(owners) {
+    window._owners = owners;
     const body = document.getElementById('owners-body');
     document.getElementById('empty-state').style.display = owners.length ? 'none' : 'block';
     body.innerHTML = owners.map(o => `
       <tr>
         <td data-label="ID">#${o.id}</td>
-        <td data-label="Company"><a href="/bookings?owner_id=${o.id}">${o.business_name}</a></td>
+        <td data-label="Company"><a href="/bookings?owner_id=${o.id}">${o.business_name}</a>${o.whatsapp_phone_id ? ' <span title="This company answers the WhatsApp number">📱</span>' : ''}</td>
         <td data-label="Owner">${o.owner_name}</td>
         <td data-label="Username">${o.username}</td>
         <td data-label="Phone ID">${o.whatsapp_phone_id || '—'}</td>
@@ -401,6 +402,7 @@
         <td data-label="Revenue">${o.currency || '$'}${Number(o.revenue).toLocaleString()}</td>
         <td data-label="Status"><span class="badge ${o.active ? 'badge-active' : 'badge-inactive'}">${o.active ? 'Active' : 'Disabled'}</span></td>
         <td class="actions">
+          ${o.whatsapp_phone_id ? '' : `<button class="btn btn-sm" style="background:#0e9f6e;color:white;" onclick='takeNumber(${o.id})'>Use 📱</button>`}
           <button class="btn btn-fleet btn-sm" onclick='openFleet(${o.id}, ${JSON.stringify(o.business_name)})'>Fleet</button>
           <button class="btn btn-primary btn-sm" onclick='openEdit(${JSON.stringify(o)})'>Edit</button>
           <button class="btn btn-warn btn-sm" onclick="resetPassword(${o.id}, '${o.username}')">Reset PW</button>
@@ -498,6 +500,37 @@
     } else {
       closeModal();
     }
+  }
+
+  // ── Move the WhatsApp number between companies (which bot answers it) ──
+  async function takeNumber(targetId) {
+    const owners = window._owners || [];
+    const target = owners.find(o => o.id === targetId);
+    const holders = owners.filter(o => o.id !== targetId && o.whatsapp_phone_id);
+    if (!holders.length) {
+      alert('No company currently holds a WhatsApp number.');
+      return;
+    }
+    let holder = holders[0];
+    if (holders.length > 1) {
+      const names = holders.map((h, i) => `${i + 1}. ${h.business_name}`).join('\n');
+      const pick = prompt(`Take the number from which company?\n${names}\n\nEnter a number:`, '1');
+      holder = holders[parseInt(pick, 10) - 1];
+      if (!holder) return;
+    }
+    if (!confirm(`Move the WhatsApp number from "${holder.business_name}" to "${target.business_name}"?\n\nCustomers messaging the number will then talk to ${target.business_name}.`)) return;
+
+    // Set on target first, then clear the old holder (routing prefers the newest)
+    await fetch(`/admin/owners/${targetId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ whatsapp_phone_id: holder.whatsapp_phone_id,
+                             whatsapp_token: holder.whatsapp_token })
+    });
+    await fetch(`/admin/owners/${holder.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ whatsapp_phone_id: '', whatsapp_token: '' })
+    });
+    fetchOwners();
   }
 
   async function resetPassword(id, username) {
