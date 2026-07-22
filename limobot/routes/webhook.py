@@ -18,28 +18,26 @@ tenant_overrides = {}  # sender -> owner_id
 
 
 def _handle_switch_command(owner, sender, text):
-    """Returns True if the message was a demo switch command (already answered)."""
+    """Returns True if the message was a demo switch command (already answered).
+
+    Only fires when the words after "switch to" actually name a business —
+    anything else ("switch to a bigger car") falls through to the normal bot."""
     lowered = text.lower().strip()
     if not lowered.startswith("switch to "):
         return False
-    target = lowered[len("switch to "):].strip()
-    match = None
+    target = lowered[len("switch to "):].strip().rstrip(".!?")
+    if not target:
+        return False
     for o in get_all_owners():
         if not o["active"]:
             continue
         if target == o["username"].lower() or target in o["business_name"].lower():
-            match = o
-            break
-    if match:
-        tenant_overrides[sender] = match["id"]
-        bot.conversations.pop((match["id"], sender), None)  # fresh start
-        whatsapp.send_text(owner, sender,
-            f"Demo switch: you are now chatting with {match['business_name']}. Say hi to begin!")
-    else:
-        names = ", ".join(o["business_name"] for o in get_all_owners() if o["active"])
-        whatsapp.send_text(owner, sender,
-            f"No business matched '{target}'. Available: {names}")
-    return True
+            tenant_overrides[sender] = o["id"]
+            bot.conversations.pop((o["id"], sender), None)  # fresh start
+            whatsapp.send_text(owner, sender,
+                f"Demo switch: you are now chatting with {o['business_name']}. Say hi to begin!")
+            return True
+    return False
 
 
 def _apply_override(owner, sender):
