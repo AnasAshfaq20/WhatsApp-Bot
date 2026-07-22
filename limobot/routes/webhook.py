@@ -10,6 +10,9 @@ router = APIRouter()
 # Deduplication — Meta sometimes retries webhooks
 processed_message_ids = set()
 
+BUSY_REPLY = ("Sorry, we're handling a lot of messages right now. "
+              "Please resend your message in a minute and I'll be right with you.")
+
 
 def _public_base(request):
     """Public https base URL of this app (Meta must be able to fetch from it)."""
@@ -125,7 +128,13 @@ def _handle_whatsapp(data, base_url=""):
         whatsapp.send_text(owner, sender, "Sorry, I can only handle text and voice messages.")
         return
 
-    reply = bot.chat(owner, sender, incoming_msg, channel=channels.WHATSAPP)
+    try:
+        reply = bot.chat(owner, sender, incoming_msg, channel=channels.WHATSAPP)
+    except Exception as e:
+        # Never go silent — rate limits and hiccups get a polite retry ask
+        print(f"bot.chat failed: {str(e)[:200]}")
+        whatsapp.send_text(owner, sender, BUSY_REPLY)
+        return
     if reply:
         print(f"Reply: {reply}")
         # Voice in -> voice-only out (full details spoken); text is the fallback
@@ -188,7 +197,12 @@ def _handle_page(data, channel, base_url=""):
                     continue
             else:
                 print(f"[{owner['business_name']}] {channel.upper()} {sender} | Msg: {text}")
-            reply = bot.chat(owner, sender, text, channel=channel)
+            try:
+                reply = bot.chat(owner, sender, text, channel=channel)
+            except Exception as e:
+                print(f"bot.chat failed: {str(e)[:200]}")
+                channels.send_text(owner, channel, sender, BUSY_REPLY)
+                continue
             if reply:
                 print(f"Reply: {reply}")
                 # Voice in -> voice-only out (full details spoken); text is the fallback

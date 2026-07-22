@@ -1,5 +1,7 @@
 """Conversation engine: system prompt, LLM, booking extraction, notifications."""
 import json
+import os
+import time
 from datetime import datetime, timedelta
 
 from langchain_groq import ChatGroq
@@ -10,6 +12,29 @@ from ..config import now_pkt
 from . import whatsapp, channels
 
 llm = ChatGroq(model="openai/gpt-oss-120b", temperature=0.2)
+# Separate quota pool on Groq — rescues conversations when the primary model
+# hits its rate limit (429), which otherwise silently killed replies
+fallback_llm = ChatGroq(model=os.getenv("FALLBACK_MODEL", "llama-3.3-70b-versatile"),
+                        temperature=0.2)
+
+
+def _invoke(history):
+    """LLM call that survives rate limits: retry primary once, then fall back
+    to the secondary model. Raises only if everything fails."""
+    last_err = None
+    for attempt, model in enumerate((llm, llm, fallback_llm), start=1):
+        try:
+            if attempt == 2:
+                time.sleep(2)
+            reply = model.invoke(history).content
+            if reply and reply.strip():
+                return reply
+            last_err = ValueError("empty LLM reply")
+            print(f"LLM attempt {attempt}: empty reply")
+        except Exception as e:
+            last_err = e
+            print(f"LLM attempt {attempt} failed: {str(e)[:200]}")
+    raise last_err
 
 # In-memory conversation state, keyed by (owner_id, customer_phone)
 conversations = {}
@@ -202,8 +227,7 @@ def chat(owner, customer_phone, incoming_msg, channel="whatsapp"):
     history = get_history(owner, customer_phone)
     history.append(HumanMessage(content=incoming_msg))
 
-    response = llm.invoke(history)
-    reply    = response.content
+    reply = _invoke(history)
     if "[BOOKING_CONFIRMED]" not in reply and "[SEND_FLEET]" not in reply:
         reply = _enforce_single_question(reply)
     history.append(AIMessage(content=reply))
@@ -220,7 +244,7 @@ def chat(owner, customer_phone, incoming_msg, channel="whatsapp"):
                 content="(No fleet image is available. List the fleet in plain text: "
                         "vehicle, capacity and hourly rate per category. "
                         "Do not output the [SEND_FLEET] tag.)"))
-            reply = llm.invoke(history).content.replace("[SEND_FLEET]", "").strip()
+            reply = _invoke(history).replace("[SEND_FLEET]", "").strip()
             history.append(AIMessage(content=reply))
 
     reply = _extract_and_log_booking(owner, reply, customer_phone, channel)
