@@ -23,7 +23,7 @@ emergency_llm = ChatGroq(model=os.getenv("EMERGENCY_MODEL", "llama-3.1-8b-instan
 
 # Free-tier friendliness: only the system prompt + the most recent turns are
 # sent to the model. Long chats otherwise resend everything each message.
-MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "12"))
+MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "15"))
 
 
 def _context_window(history):
