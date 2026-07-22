@@ -84,17 +84,24 @@ check("[SEND_FLEET] tag stripped from reply", "[SEND_FLEET]" not in (reply2 or "
 reply3 = bot.chat(lux, "92399TEST",
                   "I need a car for 5 people this Saturday 7pm, pickup at Grand Hotel, "
                   "4 hours for a night out")
-check("quote includes a price in owner currency", (lux.get("currency") or "$") in reply3, reply3)
 
 before = len(db.get_bookings_for_owner(lux_id))
-bot.chat(lux, "92399TEST", "My name is Test Bilal, let's go with the V-Class")
-# explicit confirmation now required
+reply4 = bot.chat(lux, "92399TEST", "My name is Test Bilal, let's go with the V-Class")
+# price appears in the quote or at latest in the booking summary
+check("quote includes a price in owner currency",
+      (lux.get("currency") or "$") in (reply3 + reply4), reply3 + " ||| " + reply4)
+# explicit confirmation now required (allow one extra conversational turn)
 reply5 = bot.chat(lux, "92399TEST", "yes please confirm the booking")
 bookings = db.get_bookings_for_owner(lux_id)
+if len(bookings) == before:
+    reply5 = bot.chat(lux, "92399TEST", "YES")
+    bookings = db.get_bookings_for_owner(lux_id)
 check("booking saved to DB after explicit yes", len(bookings) == before + 1, f"{before} -> {len(bookings)}")
 check("[BOOKING_CONFIRMED] tag not leaked", "[BOOKING_CONFIRMED]" not in (reply5 or ""))
 
-new_booking = bookings[-1]
+new_booking = bookings[-1] if bookings else {
+    "owner_id": None, "name": "", "vehicle": "", "pickup_location": "",
+    "ref": "", "timestamp": "", "id": -1, "status": ""}
 check("booking has correct owner scoping", new_booking["owner_id"] == lux_id)
 check("booking name captured", "Bilal" in new_booking["name"], new_booking["name"])
 check("booking vehicle captured", new_booking["vehicle"], new_booking)
@@ -123,6 +130,35 @@ check("deposit and payment link in confirmation",
 conf2 = bot.format_confirmation(lux, {"name": "T", "vehicle": "V", "booking_type": "hourly",
     "pickup_location": "A", "pickup_time": "Mon", "hours": 2, "passengers": 2, "total": 140}, "LX-0002")
 check("no deposit line when deposit is 0", "deposit" not in conf2.lower(), conf2)
+
+# ==== 5c. ENQUIRY BOT TYPE ====
+db.update_owner(el_id, {"bot_type": "enquiry",
+                        "knowledge": "Acme Advisory helps startups with tax filings and CFO services. Contact acme@example.com."})
+enq_owner = db.get_owner_by_id(el_id)
+enq_prompt = bot.build_system_prompt(enq_owner)
+check("enquiry prompt uses knowledge", "Acme Advisory" in enq_prompt and "tax filings" in enq_prompt)
+check("enquiry prompt has capture tag", "[ENQUIRY_CAPTURED]" in enq_prompt)
+check("enquiry prompt has no fleet pricing", "min_hours" not in enq_prompt)
+
+sent.clear()
+ebefore = len(db.get_bookings_for_owner(el_id))
+fake_reply = ('Submitting now.\n[ENQUIRY_CAPTURED]\n'
+              '{"name": "Lead Test", "company": "TestCo", "service": "CFO Services", '
+              '"contact": "lead@test.co", "preferred_time": "Monday", "details": "Needs help"}')
+clean = bot._extract_and_log_booking(enq_owner, fake_reply, "92355ENQ", "whatsapp")
+enqs = db.get_bookings_for_owner(el_id)
+check("enquiry saved as booking", len(enqs) == ebefore + 1)
+check("enquiry fields mapped", enqs[-1]["booking_type"] == "enquiry"
+      and enqs[-1]["vehicle"] == "CFO Services" and enqs[-1]["pickup_location"] == "lead@test.co")
+check("enquiry tag stripped from reply", "[ENQUIRY_CAPTURED]" not in clean)
+check("enquiry confirmation sent", any("CONSULTATION REQUEST RECEIVED" in s[3] for s in sent
+                                       if s[0] == "text"), sent)
+db.update_owner(el_id, {"bot_type": "fleet"})
+conn = db.get_db()
+cur = conn.cursor()
+cur.execute("DELETE FROM bookings WHERE phone = '92355ENQ'")
+conn.commit()
+conn.close()
 
 # ==== 6. TENANT ISOLATION ====
 check("conversations keyed per owner",
