@@ -146,7 +146,7 @@
       color: var(--text-muted);
       margin-bottom: 4px;
     }
-    .field input {
+    .field input, .field select, .field textarea {
       width: 100%;
       padding: 9px 12px;
       border: 1px solid var(--border);
@@ -154,8 +154,11 @@
       background: var(--input-bg);
       color: var(--text);
       font-size: 0.86rem;
+      font-family: inherit;
     }
-    .field input:focus { outline: 2px solid #6366f1; border-color: transparent; }
+    .field input:focus, .field select:focus, .field textarea:focus {
+      outline: 2px solid #6366f1; border-color: transparent;
+    }
 
     .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 
@@ -287,6 +290,15 @@
       <div class="field"><label>Currency Symbol</label><input id="f-currency" placeholder="£"></div>
       <div class="field"><label>Booking Deposit (0 = none)</label><input id="f-deposit_amount" type="number" placeholder="50"></div>
       <div class="field full"><label>Payment Link (shown with the deposit request)</label><input id="f-payment_link" placeholder="https://buy.stripe.com/..."></div>
+      <div class="field"><label>Bot Type</label>
+        <select id="f-bot_type">
+          <option value="fleet">Fleet — vehicle bookings</option>
+          <option value="enquiry">Enquiry — Q&amp;A + consultation leads</option>
+        </select>
+      </div>
+      <div class="field full"><label>Knowledge / Business Profile (used by enquiry bots to answer questions)</label>
+        <textarea id="f-knowledge" rows="6" placeholder="Company overview, services, locations, contact details..."></textarea>
+      </div>
       <div class="field full"><label>WhatsApp Token</label><input id="f-whatsapp_token" placeholder="EAAxxxx..."></div>
       <div class="field"><label>WhatsApp Phone ID</label><input id="f-whatsapp_phone_id" placeholder="1132931713234299"></div>
       <div class="field full"><label>Voice Agent Number (the number customers call)</label><input id="f-voice_phone" placeholder="+1 555 000 1111"></div>
@@ -366,7 +378,8 @@
   const FIELDS = ['username','owner_name','business_name','hours','admin_phone',
                   'location','service_area','currency','whatsapp_token',
                   'whatsapp_phone_id','voice_phone','fb_page_id','fb_page_token',
-                  'ig_account_id','ig_token','deposit_amount','payment_link'];
+                  'ig_account_id','ig_token','deposit_amount','payment_link',
+                  'bot_type','knowledge'];
 
   async function fetchOwners() {
     const r = await fetch('/admin/owners');
@@ -403,6 +416,7 @@
     document.getElementById('modal-title').textContent = 'Add Company';
     FIELDS.forEach(f => document.getElementById('f-' + f).value = '');
     document.getElementById('f-currency').value = '$';
+    document.getElementById('f-bot_type').value = 'fleet';
     document.getElementById('f-fleet_file').value = '';
     document.getElementById('current-image-note').textContent = '';
     document.getElementById('f-username').disabled = false;

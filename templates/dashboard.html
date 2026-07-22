@@ -528,8 +528,14 @@
       const status  = b.status || 'pending';
       const isTransfer = b.booking_type === 'transfer';
       const isDaily    = b.booking_type === 'daily';
+      const isEnquiry  = b.booking_type === 'enquiry';
 
-      const routeHtml = `
+      const routeHtml = isEnquiry ? `
+        <div class="route-box">
+          Contact: ${b.pickup_location}
+          ${b.dropoff_location ? `<br>Company: ${b.dropoff_location}` : ''}
+          ${b.occasion ? `<br>Details: ${b.occasion}` : ''}
+        </div>` : `
         <div class="route-box">
           From: ${b.pickup_location}
           ${b.dropoff_location ? `<br>To: ${b.dropoff_location}` : ''}
@@ -572,7 +578,7 @@
             </div>
             <div class="vehicle-row">
               <span>🚘 ${b.vehicle}</span>
-              <span class="type-chip">${isTransfer ? 'Transfer' : isDaily ? 'Daily Hire' : 'Hourly'}</span>
+              <span class="type-chip">${isEnquiry ? 'Enquiry' : isTransfer ? 'Transfer' : isDaily ? 'Daily Hire' : 'Hourly'}</span>
             </div>
             <div class="pickup-row">🕑 Pickup: ${b.pickup_time}</div>
             ${routeHtml}
@@ -580,8 +586,8 @@
             ${b.occasion ? `<div class="meta-row"><span>Occasion</span><span>${b.occasion}</span></div>` : ''}
             ${driverHtml}
             <div class="total-row">
-              <span>Total</span>
-              <span>${CUR}${(b.total || 0).toLocaleString()}</span>
+              <span>${isEnquiry ? 'Consultation request' : 'Total'}</span>
+              <span>${isEnquiry ? '—' : CUR + (b.total || 0).toLocaleString()}</span>
             </div>
           </div>
           ${actions ? `<div class="status-actions">${actions}</div>` : ''}

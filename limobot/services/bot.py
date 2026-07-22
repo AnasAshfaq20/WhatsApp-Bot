@@ -16,6 +16,55 @@ conversations = {}
 
 
 def build_system_prompt(owner):
+    if (owner.get("bot_type") or "fleet") == "enquiry":
+        return _enquiry_prompt(owner)
+    return _fleet_prompt(owner)
+
+
+def _enquiry_prompt(owner):
+    name  = owner["business_name"]
+    now   = now_pkt()
+    today = now.strftime("%A, %d %B %Y")
+    return f"""You are the professional WhatsApp assistant for "{name}".
+
+TODAY'S DATE: {today}.
+
+BUSINESS KNOWLEDGE (answer ONLY from this — never invent services, prices, clients or facts):
+{owner.get('knowledge', '')}
+
+YOUR JOB:
+- Welcome visitors warmly and professionally
+- Answer questions about the firm, its services, industries and locations using the knowledge above
+- Understand what the visitor needs and guide them toward booking a consultation
+- Capture a consultation enquiry: their full name, company, the service or area they need help with, and their preferred contact (email or phone) — plus any preferred time for a call
+
+GREETING — FIRST MESSAGE ONLY:
+- If the visitor opens with just a greeting, reply warmly: greet back, one or two lines on what {name} does, then "How can I help you today?"
+- If their first message already states a need, respond to it directly.
+
+ONE QUESTION AT A TIME — THIS IS CRITICAL:
+- Every reply contains AT MOST ONE question. End the reply right after that question.
+- Never ask for two or more details in the same message. Never send a list of questions.
+- If the visitor volunteers several details at once, accept them all and ask only for the next single missing detail.
+
+CONVERSATION RULES:
+1. Keep replies SHORT — this is WhatsApp. Use line breaks, not paragraphs.
+2. No emojis. No markdown formatting — no asterisks, underscores, bullets or numbered lists. Plain text only.
+3. Re-read the conversation before asking anything; never re-ask a detail already given.
+4. If asked something not covered by the knowledge (exact pricing, specific availability), say the team will cover it on the consultation call — and offer to arrange one.
+5. CONFIRMATION IS MANDATORY. Once you have their name, company, area of interest and contact details, show a short summary and ask: "Shall I submit this consultation request? Please reply YES to confirm."
+6. ONLY after an explicit yes, end your reply with this exact tag on its own line:
+   [ENQUIRY_CAPTURED]
+   Followed by JSON like:
+   {{"name": "Sarah Ahmed", "company": "Falcon Capital", "service": "Fund Administration", "contact": "sarah@falconcap.com", "preferred_time": "Tuesday morning", "details": "Setting up a new ADGM fund, needs NAV and investor reporting"}}
+   Never output the tag in the same message where you ask for confirmation.
+7. If the user is rude or off-topic, respond politely that you can only help with {name} enquiries.
+8. If asked who you are: "I am the {name} assistant. I can tell you about our services and arrange a consultation."
+
+Stay strictly focused on {name} and its services."""
+
+
+def _fleet_prompt(owner):
     fleet      = get_fleet_dict(owner)
     fleet_text = json.dumps(fleet, indent=2)
     name       = fleet["business_name"]
@@ -255,7 +304,75 @@ def notify_owner(owner, booking, ref):
     print(f"Owner notified at {owner['admin_phone']}")
 
 
+def format_enquiry_confirmation(owner, enquiry, ref):
+    lines = [
+        "CONSULTATION REQUEST RECEIVED",
+        "=" * 28,
+        f"Reference: {ref}",
+        f"Name: {enquiry.get('name', '')}",
+    ]
+    if enquiry.get("company"):
+        lines.append(f"Company: {enquiry['company']}")
+    lines += [
+        f"Area: {enquiry.get('service', '')}",
+        f"Contact: {enquiry.get('contact', '')}",
+    ]
+    if enquiry.get("preferred_time"):
+        lines.append(f"Preferred time: {enquiry['preferred_time']}")
+    lines += [
+        "=" * 28,
+        f"Thank you — the {owner['business_name']} team will be in touch shortly.",
+    ]
+    return "\n".join(lines)
+
+
+def _extract_and_log_enquiry(owner, reply_text, customer_phone, channel):
+    try:
+        parts       = reply_text.split("[ENQUIRY_CAPTURED]")
+        clean_reply = parts[0].strip()
+        json_part   = parts[1].strip().replace("```json", "").replace("```", "").strip()
+        enquiry     = json.loads(json_part)
+
+        booking_id = save_booking(
+            owner_id         = owner["id"],
+            phone            = customer_phone,
+            name             = enquiry.get("name", "Guest"),
+            vehicle          = enquiry.get("service", "General enquiry"),
+            booking_type     = "enquiry",
+            pickup_location  = enquiry.get("contact", ""),
+            dropoff_location = enquiry.get("company", ""),
+            pickup_time      = enquiry.get("preferred_time", "") or "ASAP",
+            hours            = 0,
+            passengers       = 1,
+            occasion         = enquiry.get("details", ""),
+            total            = 0,
+            channel          = channel,
+        )
+        ref = booking_ref(booking_id)
+        print(f"ENQUIRY SAVED TO DB: {ref} {enquiry}")
+
+        channels.send_text(owner, channel, customer_phone,
+                           format_enquiry_confirmation(owner, enquiry, ref))
+        try:
+            if owner.get("admin_phone"):
+                whatsapp.send_text(owner, owner["admin_phone"],
+                    f"NEW CONSULTATION ENQUIRY {ref}\n"
+                    f"Name: {enquiry.get('name', '')} ({enquiry.get('company', '') or 'no company'})\n"
+                    f"Area: {enquiry.get('service', '')}\n"
+                    f"Contact: {enquiry.get('contact', '')}\n"
+                    f"Details: {enquiry.get('details', '') or 'N/A'}")
+        except Exception as e:
+            print(f"Owner notify failed: {e}")
+
+        return clean_reply
+    except Exception as e:
+        print(f"Enquiry parse failed: {e}")
+        return reply_text.split("[ENQUIRY_CAPTURED]")[0].strip()
+
+
 def _extract_and_log_booking(owner, reply_text, customer_phone, channel="whatsapp"):
+    if "[ENQUIRY_CAPTURED]" in reply_text:
+        return _extract_and_log_enquiry(owner, reply_text, customer_phone, channel)
     if "[BOOKING_CONFIRMED]" not in reply_text:
         return reply_text
     try:

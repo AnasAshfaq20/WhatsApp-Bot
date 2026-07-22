@@ -82,6 +82,11 @@ def init_db():
     c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS deposit_amount INTEGER DEFAULT 0")
     c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS payment_link TEXT DEFAULT ''")
 
+    # Bot personality: 'fleet' = vehicle bookings, 'enquiry' = knowledge-based
+    # Q&A + consultation lead capture (knowledge holds the business profile)
+    c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS bot_type TEXT DEFAULT 'fleet'")
+    c.execute("ALTER TABLE owners ADD COLUMN IF NOT EXISTS knowledge TEXT DEFAULT ''")
+
     c.execute("""
         CREATE TABLE IF NOT EXISTS vehicles (
             id           SERIAL PRIMARY KEY,
@@ -229,7 +234,7 @@ def update_owner(owner_id, fields):
                "whatsapp_token", "whatsapp_phone_id", "admin_phone", "currency",
                "fleet_image_url", "voice_phone", "active", "username",
                "fb_page_id", "fb_page_token", "ig_account_id", "ig_token", "ig_app_id",
-               "deposit_amount", "payment_link"}
+               "deposit_amount", "payment_link", "bot_type", "knowledge"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if "password" in fields and fields["password"]:
         updates["password_hash"] = generate_password_hash(fields["password"])
@@ -260,7 +265,7 @@ OWNER_COLS = ("id, username, password_hash, owner_name, business_name, hours, "
               "location, service_area, currency, whatsapp_token, whatsapp_phone_id, "
               "admin_phone, fleet_image_url, voice_phone, active, created_at, "
               "fb_page_id, fb_page_token, ig_account_id, ig_token, ig_app_id, "
-              "deposit_amount, payment_link")
+              "deposit_amount, payment_link, bot_type, knowledge")
 
 
 def get_owner_by_id(owner_id):
